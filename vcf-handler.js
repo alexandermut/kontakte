@@ -138,6 +138,48 @@ export function exportContacts() {
 }
 
 /**
+ * Finds duplicate contacts based on name, email, or phone.
+ * Returns the existing contact if found, null otherwise.
+ */
+function findDuplicate(newContact, existingContacts) {
+    // Normalize strings for comparison
+    const normalize = (str) => (str || '').toLowerCase().trim();
+
+    const newFirstName = normalize(newContact.firstName);
+    const newLastName = normalize(newContact.lastName);
+    const newEmail = normalize(newContact.email);
+    const newWorkEmail = normalize(newContact.workEmail);
+    const newPhone = normalize(newContact.phone);
+    const newMobile = normalize(newContact.mobile);
+    const newWorkPhone = normalize(newContact.workPhone);
+
+    return existingContacts.find(existing => {
+        // Check name match (both first and last name must match)
+        const nameMatch =
+            newFirstName && newLastName &&
+            normalize(existing.firstName) === newFirstName &&
+            normalize(existing.lastName) === newLastName;
+
+        // Check email match (any email matches)
+        const emailMatch =
+            (newEmail && normalize(existing.email) === newEmail) ||
+            (newWorkEmail && normalize(existing.workEmail) === newWorkEmail) ||
+            (newEmail && normalize(existing.workEmail) === newEmail) ||
+            (newWorkEmail && normalize(existing.email) === newWorkEmail);
+
+        // Check phone match (any phone number matches)
+        const phoneMatch =
+            (newPhone && normalize(existing.phone) === newPhone) ||
+            (newMobile && normalize(existing.mobile) === newMobile) ||
+            (newWorkPhone && normalize(existing.workPhone) === newWorkPhone) ||
+            (newPhone && normalize(existing.mobile) === newPhone) ||
+            (newMobile && normalize(existing.phone) === newMobile);
+
+        return nameMatch || emailMatch || phoneMatch;
+    });
+}
+
+/**
  * Imports contacts from a VCF file.
  */
 export function importVCF(event) {
@@ -149,6 +191,8 @@ export function importVCF(event) {
         const text = e.target.result;
         const vcards = text.split('BEGIN:VCARD');
         let importedCount = 0;
+        let skippedCount = 0;
+        let replacedCount = 0;
 
         vcards.forEach(vcardText => {
             if (!vcardText.trim()) return;
@@ -310,23 +354,61 @@ export function importVCF(event) {
                 }
             }
 
-            // Check for duplicates
-            const isDuplicate = state.contacts.some(c =>
-                (c.lastName || '').toLowerCase() === (contact.lastName || '').toLowerCase() &&
-                (c.firstName || '').toLowerCase() === (contact.firstName || '').toLowerCase()
-            );
+            // Skip contacts without last name
+            if (!contact.lastName) {
+                return;
+            }
 
-            if (contact.lastName && !isDuplicate) {
+            // Check for duplicates
+            const duplicate = findDuplicate(contact, state.contacts);
+
+            if (duplicate) {
+                // Ask user what to do with duplicate
+                const name = `${contact.firstName} ${contact.lastName}`.trim();
+                const action = confirm(
+                    `Duplikat gefunden: "${name}"\n\n` +
+                    `Ein Kontakt mit diesem Namen oder dieser E-Mail/Telefonnummer existiert bereits.\n\n` +
+                    `OK = Ersetzen (alte Daten werden überschrieben)\n` +
+                    `Abbrechen = Überspringen (Import überspringen)`
+                );
+
+                if (action) {
+                    // Replace: Find index and update
+                    const index = state.contacts.findIndex(c => c.id === duplicate.id);
+                    if (index !== -1) {
+                        // Keep the old ID and favorite status
+                        contact.id = duplicate.id;
+                        contact.isFavorite = duplicate.isFavorite;
+                        state.contacts[index] = contact;
+                        replacedCount++;
+                    }
+                } else {
+                    // Skip
+                    skippedCount++;
+                }
+            } else {
+                // No duplicate, add as new contact
                 state.contacts = [...state.contacts, contact];
                 state.nextId++;
                 importedCount++;
             }
         });
 
-        if (importedCount > 0) {
-            showNotification(`${importedCount} Kontakte importiert.`);
+        // Force re-render if we replaced contacts
+        if (replacedCount > 0) {
+            state.contacts = [...state.contacts];
+        }
+
+        // Show summary notification
+        const messages = [];
+        if (importedCount > 0) messages.push(`${importedCount} neu`);
+        if (replacedCount > 0) messages.push(`${replacedCount} ersetzt`);
+        if (skippedCount > 0) messages.push(`${skippedCount} übersprungen`);
+
+        if (messages.length > 0) {
+            showNotification(`Import abgeschlossen: ${messages.join(', ')}`);
         } else {
-            showNotification('Keine neuen Kontakte in der Datei gefunden.');
+            showNotification('Keine Kontakte importiert.');
         }
         event.target.value = null;
     };
