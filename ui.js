@@ -1,0 +1,196 @@
+import { state, dom } from './state.js';
+import { escapeHTML, sortContacts } from './utils.js';
+import { filterContacts } from './filters.js';
+
+/**
+ * Renders the entire application UI based on the current state.
+ */
+export function render() {
+    console.log("Render-Funktion aufgerufen, zeichne Kontakte als Tabelle...");
+    renderHeader();
+    renderContactList();
+    updateContactCount();
+}
+
+function updateContactCount() {
+    const filteredContacts = filterContacts(state.contacts);
+    const total = state.contacts.length;
+    const shown = filteredContacts.length;
+
+    if (state.searchTerm.trim()) {
+        dom.contactCount.textContent = `${shown} von ${total} Kontakten`;
+    } else {
+        dom.contactCount.textContent = `${total} Kontakt${total !== 1 ? 'e' : ''}`;
+    }
+}
+
+function renderContactList() {
+    const contactList = dom.contactList;
+    contactList.innerHTML = ''; // Liste vor dem Neuzeichnen leeren
+
+    // Kontakte filtern und sortieren
+    const filteredContacts = filterContacts(state.contacts);
+
+    if (filteredContacts.length === 0) {
+        const safeSearchTerm = escapeHTML(state.searchTerm);
+        const emptyMessage = state.searchTerm === ''
+            ? 'Keine Kontakte gefunden. Zeit, welche hinzuzufügen!'
+            : `Keine Kontakte für '<strong>${safeSearchTerm}</strong>' gefunden.`;
+
+        contactList.innerHTML = `
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <p>${emptyMessage}</p>
+            </div>`;
+        return;
+    }
+
+    // Kontakte sortieren
+    const sortedContacts = [...filteredContacts].sort(sortContacts);
+
+    // Trenne Favoriten von normalen Kontakten
+    const favorites = sortedContacts.filter(c => c.isFavorite);
+    const nonFavorites = sortedContacts.filter(c => !c.isFavorite);
+
+    // Helper-Funktion zum Rendern eines Kontakts
+    const renderContact = (contact) => {
+        const contactEl = document.createElement('div');
+        contactEl.className = `contact-item ${state.selectedContactIds.has(contact.id) ? 'selected' : ''}`;
+        contactEl.dataset.id = contact.id;
+
+        const safeLastName = escapeHTML(contact.lastName);
+        const safeFirstName = escapeHTML(contact.firstName);
+        const safeCompany = escapeHTML(contact.company);
+        const safeEmail = escapeHTML(contact.email || '');
+        const safePhone = escapeHTML(contact.phone || '');
+        const safeStreet = escapeHTML(contact.street || '');
+        const safeZip = escapeHTML(contact.zip || '');
+        const safeCity = escapeHTML(contact.city || '');
+
+        const favoriteBtnClass = contact.isFavorite ? 'favorite-btn favorited' : 'favorite-btn';
+        const favoriteIcon = contact.isFavorite
+            ? `<svg viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>`
+            : `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>`;
+
+        contactEl.innerHTML = `
+            <div class="contact-actions">
+                <button class="${favoriteBtnClass}" aria-label="Als Favorit markieren">
+                    ${favoriteIcon}
+                </button>
+                <button class="edit-btn" aria-label="Kontakt bearbeiten">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+                </button>
+                <button class="delete-btn" aria-label="Kontakt löschen">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+            <span class="name-col">${safeFirstName}</span>
+            <span>${safeLastName}</span>
+            <span>${safeCompany}</span>
+            <span>${safePhone}</span>
+            <span>${safeEmail}</span>
+            <span>${safeStreet}</span>
+            <span>${safeZip}</span>
+            <span>${safeCity}</span>`;
+        return contactEl;
+    };
+
+    // Rendere Favoriten zuerst (wenn vorhanden)
+    if (favorites.length > 0) {
+        const favoritesHeader = document.createElement('div');
+        favoritesHeader.className = 'group-header favorites-header';
+        favoritesHeader.innerHTML = '★ Favoriten';
+        contactList.appendChild(favoritesHeader);
+
+        favorites.forEach(contact => {
+            contactList.appendChild(renderContact(contact));
+        });
+    }
+
+    // Rendere normale Kontakte gruppiert nach Buchstaben
+    if (nonFavorites.length > 0) {
+        // Gruppiere nach Anfangsbuchstaben
+        const groupedContacts = nonFavorites.reduce((acc, contact) => {
+            const sortKey = state.sort.by;
+            const firstLetter = (contact[sortKey] || '#')[0].toUpperCase();
+            if (!acc[firstLetter]) {
+                acc[firstLetter] = [];
+            }
+            acc[firstLetter].push(contact);
+            return acc;
+        }, {});
+
+        // Sortiere Buchstaben
+        const sortedLetters = Object.keys(groupedContacts).sort((a, b) => {
+            if (a === '#' && b === '#') return 0;
+            if (a === '#') return 1;
+            if (b === '#') return -1;
+            const comparison = a.localeCompare(b);
+            return state.sort.order === 'asc' ? comparison : -comparison;
+        });
+
+        // Rendere gruppierte Kontakte
+        sortedLetters.forEach(letter => {
+            const groupHeaderEl = document.createElement('div');
+            groupHeaderEl.className = 'group-header';
+            groupHeaderEl.textContent = letter;
+            contactList.appendChild(groupHeaderEl);
+
+            groupedContacts[letter].forEach(contact => {
+                contactList.appendChild(renderContact(contact));
+            });
+        });
+    }
+
+    // Update selection-dependent buttons status
+    updateSelectionButtons();
+}
+
+function updateSelectionButtons() {
+    const hasSelection = state.selectedContactIds.size > 0;
+    dom.deleteSelectedBtn.disabled = !hasSelection;
+    dom.exportSelectedBtn.disabled = !hasSelection;
+}
+
+function renderHeader() {
+    const headers = [
+        { key: 'actions', label: 'Aktionen' },
+        { key: 'firstName', label: 'Vorname' },
+        { key: 'lastName', label: 'Nachname' },
+        { key: 'company', label: 'Firma' },
+        { key: 'phone', label: 'Telefon' },
+        { key: 'email', label: 'E-Mail' },
+        { key: 'street', label: 'Straße' },
+        { key: 'zip', label: 'PLZ' },
+        { key: 'city', label: 'Ort' },
+    ];
+
+    dom.contactListHeader.innerHTML = '';
+    headers.forEach(header => {
+        const headerEl = document.createElement('div');
+        headerEl.className = 'col-header';
+
+        // Aktionen-Spalte ist nicht sortierbar
+        if (header.key !== 'actions') {
+            headerEl.dataset.sortKey = header.key;
+            
+            // Markiere aktive Spalte
+            if (state.sort.by === header.key) {
+                headerEl.classList.add('active');
+            }
+
+            const sortIcon = state.sort.order === 'asc' ? '▲' : '▼';
+            const iconHtml = state.sort.by === header.key 
+                ? `<span class="sort-icon">${sortIcon}</span>` 
+                : '<span class="sort-icon" style="opacity: 0.3;">▲</span>';
+            
+            headerEl.innerHTML = `<div>${header.label} ${iconHtml}</div>`;
+        } else {
+            headerEl.innerHTML = `<div>${header.label}</div>`;
+        }
+        
+        dom.contactListHeader.appendChild(headerEl);
+    });
+}

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(open \"http://localhost:8000/index.html\")",
+      "Bash(open \"http://localhost:8001/index.html\")",
+      "Bash(pkill:*)",
+      "Bash(open:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

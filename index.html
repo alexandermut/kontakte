@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kontaktmanager (VCF Sync)</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- --- HTML (Struktur) --- -->
+    <div class="container">
+        <header class="app-header">
+            <h1>Kontaktmanager</h1>
+            <div class="header-actions">
+                <button id="theme-toggle" class="icon-btn" aria-label="Theme wechseln">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="toolbar">
+            <div class="search-wrapper">
+                <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                </svg>
+                <input type="text" id="search-input" placeholder="Kontakte durchsuchen..." />
+                <div id="contact-count" class="contact-count"></div>
+            </div>
+            <div class="filter-wrapper">
+                <select id="category-filter" class="filter-select">
+                    <option value="">Alle Kategorien</option>
+                    <option value="favorites">★ Nur Favoriten</option>
+                    <option value="Familie">Familie</option>
+                    <option value="Freunde">Freunde</option>
+                    <option value="Arbeit">Arbeit</option>
+                    <option value="Geschäft">Geschäft</option>
+                    <option value="Sonstige">Sonstige</option>
+                </select>
+            </div>
+            <div class="toolbar-buttons">
+                <button id="new-contact-btn" class="btn btn-primary">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                    </svg>
+                    Neu
+                </button>
+                <button id="import-btn" class="btn">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    </svg>
+                    Import
+                </button>
+                <button id="export-btn" class="btn">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                    Export
+                </button>
+                <button id="export-selected-btn" class="btn" disabled>
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                    Auswahl exportieren
+                </button>
+                <button id="delete-selected-btn" class="btn btn-danger" disabled>
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    Auswahl löschen
+                </button>
+            </div>
+        </div>
+
+        <main class="contact-list-container">
+            <div id="contact-list-header" class="contact-list-header"></div>
+            <div id="contact-list" class="contact-list"></div>
+        </main>
+    </div>
+
+    <!-- Modal für Kontakt erstellen/bearbeiten -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Neuer Kontakt</h2>
+                <button id="modal-close-header-btn" class="icon-btn" aria-label="Schließen">
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+            <form id="contact-form">
+                <input type="hidden" id="contact-id">
+
+                <!-- Tab Navigation -->
+                <div class="form-tabs">
+                    <button type="button" class="form-tab active" data-tab="general">Allgemein</button>
+                    <button type="button" class="form-tab" data-tab="private">Privat</button>
+                    <button type="button" class="form-tab" data-tab="business">Beruflich</button>
+                </div>
+
+                <!-- Tab: Allgemein -->
+                <div class="form-tab-content active" data-tab-content="general">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contact-firstName">Vorname</label>
+                            <input type="text" id="contact-firstName" placeholder="Max">
+                        </div>
+                        <div class="form-group">
+                            <label for="contact-lastName">Nachname *</label>
+                            <input type="text" id="contact-lastName" required placeholder="Mustermann">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contact-nickname">Spitzname</label>
+                            <input type="text" id="contact-nickname" placeholder="Maxi">
+                        </div>
+                        <div class="form-group">
+                            <label for="contact-birthday">Geburtstag</label>
+                            <input type="date" id="contact-birthday">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contact-category">Kategorie</label>
+                            <select id="contact-category">
+                                <option value="">Keine Kategorie</option>
+                                <option value="Familie">Familie</option>
+                                <option value="Freunde">Freunde</option>
+                                <option value="Arbeit">Arbeit</option>
+                                <option value="Geschäft">Geschäft</option>
+                                <option value="Sonstige">Sonstige</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="contact-url">Website</label>
+                            <input type="url" id="contact-url" placeholder="https://www.beispiel.de">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contact-notes">Notizen</label>
+                        <textarea id="contact-notes" rows="3" placeholder="Persönliche Notizen..."></textarea>
+                    </div>
+
+                    <h4 class="form-section-title">Social Media Profile</h4>
+                    <p class="form-help-text">Doppelklick auf eine Plattform, um Benutzername hinzuzufügen</p>
+
+                    <!-- Social Media Badges -->
+                    <div id="social-media-badges" class="social-media-badges"></div>
+                </div>
+
+                <!-- Tab: Privat -->
+                <div class="form-tab-content" data-tab-content="private">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contact-email">E-Mail (Privat)</label>
+                            <input type="email" id="contact-email" placeholder="max@beispiel.de">
+                        </div>
+                        <div class="form-group">
+                            <label for="contact-phone">Telefon (Privat)</label>
+                            <input type="tel" id="contact-phone" placeholder="+49 123 456789">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contact-mobile">Mobiltelefon (Privat)</label>
+                        <input type="tel" id="contact-mobile" placeholder="+49 176 12345678">
+                    </div>
+
+                    <h4 class="form-section-title">Privatadresse</h4>
+                    <div class="form-group">
+                        <label for="contact-street">Straße & Hausnummer</label>
+                        <input type="text" id="contact-street" placeholder="Musterstraße 1">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 0 0 30%;">
+                            <label for="contact-zip">PLZ</label>
+                            <input type="text" id="contact-zip" placeholder="12345" maxlength="5">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="contact-city">Ort</label>
+                            <input type="text" id="contact-city" placeholder="Musterstadt">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Beruflich -->
+                <div class="form-tab-content" data-tab-content="business">
+                    <div class="form-group">
+                        <label for="contact-company">Firma</label>
+                        <input type="text" id="contact-company" placeholder="Beispiel GmbH">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contact-title">Titel / Position</label>
+                        <input type="text" id="contact-title" placeholder="Geschäftsführer">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contact-workEmail">E-Mail (Geschäftlich)</label>
+                            <input type="email" id="contact-workEmail" placeholder="max.mustermann@firma.de">
+                        </div>
+                        <div class="form-group">
+                            <label for="contact-workPhone">Telefon (Geschäftlich)</label>
+                            <input type="tel" id="contact-workPhone" placeholder="+49 30 12345678">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contact-workMobile">Mobiltelefon (Geschäftlich)</label>
+                        <input type="tel" id="contact-workMobile" placeholder="+49 151 12345678">
+                    </div>
+
+                    <h4 class="form-section-title">Geschäftsadresse</h4>
+                    <div class="form-group">
+                        <label for="contact-workStreet">Straße & Hausnummer</label>
+                        <input type="text" id="contact-workStreet" placeholder="Firmenstraße 10">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 0 0 30%;">
+                            <label for="contact-workZip">PLZ</label>
+                            <input type="text" id="contact-workZip" placeholder="12345" maxlength="5">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="contact-workCity">Ort</label>
+                            <input type="text" id="contact-workCity" placeholder="Berlin">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="modal-delete-btn" class="btn btn-danger hidden">Löschen</button>
+                    <div style="flex: 1;"></div>
+                    <button type="button" id="modal-cancel-btn" class="btn">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="notification"></div>
+
+    <!-- Hidden File Input für VCF Import -->
+    <input type="file" id="vcf-input" accept=".vcf" style="display: none;">
+
+    <!-- --- JavaScript (Logik) --- -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>
