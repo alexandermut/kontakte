@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kontaktmanager (VCF Sync)</title>
+    <title>Kontakte (VCF Sync)</title>
     <link rel="stylesheet" href="style.css">
     <!-- Inter Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,7 +15,7 @@
     <!-- --- HTML (Struktur) --- -->
     <div class="container">
         <header class="app-header">
-            <h1>Kontaktmanager</h1>
+            <h1>Kontakte</h1>
             <div class="header-actions">
                 <button id="theme-toggle" class="icon-btn" aria-label="Theme wechseln">
                     <svg viewBox="0 0 20 20" fill="currentColor">
@@ -202,9 +202,15 @@
                         <input type="text" id="contact-company" placeholder="Beispiel GmbH">
                     </div>
 
-                    <div class="form-group">
-                        <label for="contact-title">Titel / Position</label>
-                        <input type="text" id="contact-title" placeholder="Geschäftsführer">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="contact-title">Titel / Position</label>
+                            <input type="text" id="contact-title" placeholder="Geschäftsführer">
+                        </div>
+                        <div class="form-group">
+                            <label for="contact-role">Rolle / Funktion</label>
+                            <input type="text" id="contact-role" placeholder="Projektleiter">
+                        </div>
                     </div>
 
                     <div class="form-row">

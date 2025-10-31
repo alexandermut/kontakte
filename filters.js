@@ -27,6 +27,7 @@ export function filterContacts(contacts) {
                    (contact.nickname || '').toLowerCase().includes(lowerSearch) ||
                    (contact.company || '').toLowerCase().includes(lowerSearch) ||
                    (contact.title || '').toLowerCase().includes(lowerSearch) ||
+                   (contact.role || '').toLowerCase().includes(lowerSearch) ||
                    (contact.email || '').toLowerCase().includes(lowerSearch) ||
                    (contact.workEmail || '').toLowerCase().includes(lowerSearch) ||
                    (contact.phone || '').toLowerCase().includes(lowerSearch) ||

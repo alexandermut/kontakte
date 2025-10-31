@@ -44,6 +44,9 @@ export function openModal(contact = null) {
         // Beruflich
         dom.contactCompanyInput.value = contact.company || '';
         dom.contactTitleInput.value = contact.title || '';
+        if (dom.contactRoleInput) {
+            dom.contactRoleInput.value = contact.role || '';
+        }
         dom.contactWorkEmailInput.value = contact.workEmail || '';
         dom.contactWorkPhoneInput.value = contact.workPhone || '';
         dom.contactWorkMobileInput.value = contact.workMobile || '';
@@ -141,6 +144,7 @@ export function saveContact(e) {
         // Beruflich
         company: dom.contactCompanyInput.value.trim(),
         title: dom.contactTitleInput.value.trim(),
+        role: dom.contactRoleInput ? dom.contactRoleInput.value.trim() : '',
         workEmail: dom.contactWorkEmailInput.value.trim(),
         workPhone: dom.contactWorkPhoneInput.value.trim(),
         workMobile: dom.contactWorkMobileInput.value.trim(),

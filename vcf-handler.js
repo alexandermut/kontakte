@@ -45,6 +45,13 @@ export function exportContactsToVCF(contacts, filename = 'contacts.vcf') {
                 : `TITLE:${contact.title}\r\n`;
         }
 
+        // Role/Function
+        if (contact.role) {
+            vcfString += needsEncoding(contact.role)
+                ? `ROLE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(contact.role)}\r\n`
+                : `ROLE:${contact.role}\r\n`;
+        }
+
         // Organization
         if (contact.company) {
             vcfString += needsEncoding(contact.company)
@@ -168,6 +175,7 @@ export function importVCF(event) {
                 name: '',
                 nickname: '',
                 title: '',
+                role: '',
                 company: '',
                 email: '',
                 phone: '',
@@ -223,6 +231,7 @@ export function importVCF(event) {
             };
 
             contact.title = getVcfField('TITLE') || '';
+            contact.role = getVcfField('ROLE') || '';
             contact.company = getVcfField('ORG') || '';
 
             // Emails - prioritize HOME vs WORK

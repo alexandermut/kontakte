@@ -75,6 +75,7 @@ export const dom = {
     contactNotesInput: document.getElementById('contact-notes'),
     contactMobileInput: document.getElementById('contact-mobile'),
     contactTitleInput: document.getElementById('contact-title'),
+    contactRoleInput: document.getElementById('contact-role'),
     contactWorkEmailInput: document.getElementById('contact-workEmail'),
     contactWorkPhoneInput: document.getElementById('contact-workPhone'),
     contactWorkMobileInput: document.getElementById('contact-workMobile'),
