@@ -16,20 +16,20 @@ export const SOCIAL_PLATFORMS = [
     { name: 'Twitch', url: 'https://www.twitch.tv/', icon: '📺' },
 ];
 
-let currentEditingBadge = null;
-
 /**
  * Renders all social media badges
+ * @param {Array} socialMediaData - The social media data for the contact
+ * @param {string} tabId - The ID of the tab to render into
  */
-export function renderSocialBadges(socialMediaData = []) {
-    const container = document.getElementById('social-media-badges');
+export function renderSocialBadges(socialMediaData = [], tabId) {
+    const container = document.getElementById(`social-media-badges-${tabId}`);
     if (!container) return;
 
     container.innerHTML = '';
 
     SOCIAL_PLATFORMS.forEach(platform => {
         const existingData = socialMediaData.find(s => s.platform === platform.name);
-        const badge = createBadge(platform, existingData?.username || '');
+        const badge = createBadge(platform, existingData?.username || '', tabId);
         container.appendChild(badge);
     });
 }
@@ -37,10 +37,11 @@ export function renderSocialBadges(socialMediaData = []) {
 /**
  * Creates a single badge element
  */
-function createBadge(platform, username = '') {
+function createBadge(platform, username = '', tabId) {
     const badge = document.createElement('div');
     badge.className = 'social-badge' + (username ? ' active' : '');
     badge.dataset.platform = platform.name;
+    badge.dataset.tabId = tabId;
 
     const linkIcon = `
         <svg viewBox="0 0 20 20" fill="currentColor" class="social-badge-icon">
@@ -65,7 +66,7 @@ function createBadge(platform, username = '') {
     // Double-click to edit/add
     badge.addEventListener('dblclick', (e) => {
         if (e.target.closest('.social-badge-remove')) return;
-        editBadge(badge, platform, username);
+        editBadge(badge, platform, username, tabId);
     });
 
     // Single click to open link (if active)
@@ -75,7 +76,8 @@ function createBadge(platform, username = '') {
             removeBadge(badge);
             return;
         }
-        if (username && !currentEditingBadge) {
+        // Only open link if no input is currently active within this form
+        if (username && !badge.querySelector('.social-badge-input')) {
             const url = platform.url + username.replace(/^@/, '');
             window.open(url, '_blank', 'noopener,noreferrer');
         }
@@ -87,13 +89,17 @@ function createBadge(platform, username = '') {
 /**
  * Edit badge (show input)
  */
-function editBadge(badge, platform, currentUsername) {
-    // Close any currently open input
-    if (currentEditingBadge && currentEditingBadge !== badge) {
-        const oldInput = currentEditingBadge.querySelector('.social-badge-input');
-        if (oldInput) oldInput.remove();
-        currentEditingBadge = null;
+function editBadge(badge, platform, currentUsername, tabId) {
+    const formWrapper = badge.closest('.contact-form-wrapper');
+    if (!formWrapper) return; // Should not happen
+
+    // Close any currently open input *within the same form*
+    const otherOpenInput = formWrapper.querySelector('.social-badge-input');
+    if (otherOpenInput) {
+        otherOpenInput.blur(); // Trigger save/close on the other input
     }
+
+    if (badge.querySelector('.social-badge-input')) return; // Already editing
 
     // Create input
     const input = document.createElement('input');
@@ -106,13 +112,10 @@ function editBadge(badge, platform, currentUsername) {
     input.focus();
     input.select();
 
-    currentEditingBadge = badge;
-
     // Save on Enter or blur
     const saveBadge = () => {
-        const newUsername = input.value.trim();
+        const newUsername = input.value.trim().replace(/^@/, '');
         input.remove();
-        currentEditingBadge = null;
 
         if (newUsername) {
             // Update badge
@@ -161,7 +164,6 @@ function editBadge(badge, platform, currentUsername) {
         } else if (e.key === 'Escape') {
             e.preventDefault();
             input.remove();
-            currentEditingBadge = null;
         }
     });
 }
@@ -180,8 +182,10 @@ function removeBadge(badge) {
 /**
  * Get all social media data from badges
  */
-export function getSocialMediaDataFromBadges() {
-    const badges = document.querySelectorAll('.social-badge.active');
+export function getSocialMediaDataFromBadges(tabId) {
+    const container = document.getElementById(`social-media-badges-${tabId}`);
+    if (!container) return [];
+    const badges = container.querySelectorAll('.social-badge.active');
     const socialMedia = [];
 
     badges.forEach(badge => {

@@ -4,6 +4,7 @@ import { isValidEmail, isValidGermanZip, findDuplicate } from './utils.js';
 import { getVisualOrder } from './visual-order.js';
 import { renderSocialBadges, getSocialMediaDataFromBadges } from './social-media-badges.js';
 import { showDuplicateDialog } from './merge.js';
+import { closeTab, closeTabsByContactId, updateTabTitle, updateTabContactId } from './tabs.js';
 
 /**
  * Shows a notification message to the user.
@@ -16,69 +17,12 @@ export function showNotification(message) {
     }, 3000);
 }
 
-/**
- * Opens the modal for creating or editing a contact.
- */
-export function openModal(contact = null) {
-    dom.contactForm.reset();
-    if (contact) {
-        dom.modalTitle.textContent = 'Kontakt bearbeiten';
-        dom.contactIdInput.value = contact.id;
-
-        // Allgemein
-        dom.contactFirstNameInput.value = contact.firstName || '';
-        dom.contactLastNameInput.value = contact.lastName || '';
-        dom.contactNicknameInput.value = contact.nickname || '';
-        dom.contactBirthdayInput.value = contact.birthday || '';
-        dom.contactCategoryInput.value = contact.category || '';
-        dom.contactUrlInput.value = contact.url || '';
-        dom.contactNotesInput.value = contact.notes || '';
-
-        // Privat
-        dom.contactEmailInput.value = contact.email || '';
-        dom.contactPhoneInput.value = contact.phone || '';
-        dom.contactMobileInput.value = contact.mobile || '';
-        dom.contactStreetInput.value = contact.street || '';
-        dom.contactZipInput.value = contact.zip || '';
-        dom.contactCityInput.value = contact.city || '';
-
-        // Beruflich
-        dom.contactCompanyInput.value = contact.company || '';
-        dom.contactTitleInput.value = contact.title || '';
-        if (dom.contactRoleInput) {
-            dom.contactRoleInput.value = contact.role || '';
-        }
-        dom.contactWorkEmailInput.value = contact.workEmail || '';
-        dom.contactWorkPhoneInput.value = contact.workPhone || '';
-        dom.contactWorkMobileInput.value = contact.workMobile || '';
-        dom.contactWorkStreetInput.value = contact.workStreet || '';
-        dom.contactWorkZipInput.value = contact.workZip || '';
-        dom.contactWorkCityInput.value = contact.workCity || '';
-
-        // Social Media Badges
-        renderSocialBadges(contact.socialMedia || []);
-
-        dom.modalDeleteBtn.classList.remove('hidden');
-    } else {
-        dom.modalTitle.textContent = 'Neuer Kontakt';
-        dom.contactIdInput.value = '';
-        renderSocialBadges([]);
-        dom.modalDeleteBtn.classList.add('hidden');
-    }
-    dom.modal.classList.remove('hidden');
-    setTimeout(() => dom.modal.classList.add('visible'), 10);
-}
-
-/**
- * Closes the modal.
- */
-export function closeModal() {
-    dom.modal.classList.remove('visible');
-    setTimeout(() => dom.modal.classList.add('hidden'), 300);
-}
+// openModal() and closeModal() REMOVED - Replaced by Tab system
+// See tabs.js for openTab() / closeTab() functions
 
 /**
  * Saves a contact (create or update).
+ * Now works with tab-based forms (each field has tab-specific ID)
  */
 export function saveContact(e) {
     e.preventDefault();
@@ -89,8 +33,24 @@ export function saveContact(e) {
         openBadgeInput.blur(); // Trigger blur to save the badge
     }
 
-    const id = dom.contactIdInput.value;
-    const lastName = dom.contactLastNameInput.value.trim();
+    // Get tab ID from form
+    const form = e.target.closest('form');
+    const tabId = form ? form.dataset.tabId : null;
+
+    if (!tabId) {
+        console.error('No tabId found in form!');
+        return;
+    }
+
+    // Helper to get field value by ID with tab suffix
+    const getVal = (id) => {
+        const el = document.getElementById(`${id}-${tabId}`);
+        return el ? el.value.trim() : '';
+    };
+
+    const idValue = document.getElementById(`contact-id-${tabId}`)?.value;
+    const id = idValue ? parseInt(idValue, 10) : null; // Convert to number!
+    const lastName = getVal('contact-lastName');
 
     // Validierung
     if (!lastName) {
@@ -98,63 +58,63 @@ export function saveContact(e) {
         return;
     }
 
-    const email = dom.contactEmailInput.value.trim();
+    const email = getVal('contact-email');
     if (email && !isValidEmail(email)) {
         showNotification('Bitte geben Sie eine gültige E-Mail-Adresse ein.');
         return;
     }
 
-    const workEmail = dom.contactWorkEmailInput.value.trim();
+    const workEmail = getVal('contact-workEmail');
     if (workEmail && !isValidEmail(workEmail)) {
         showNotification('Bitte geben Sie eine gültige geschäftliche E-Mail-Adresse ein.');
         return;
     }
 
-    const zip = dom.contactZipInput.value.trim();
+    const zip = getVal('contact-zip');
     if (zip && !isValidGermanZip(zip)) {
         showNotification('PLZ muss aus 5 Ziffern bestehen.');
         return;
     }
 
-    const workZip = dom.contactWorkZipInput.value.trim();
+    const workZip = getVal('contact-workZip');
     if (workZip && !isValidGermanZip(workZip)) {
         showNotification('Geschäftliche PLZ muss aus 5 Ziffern bestehen.');
         return;
     }
 
-    const firstName = dom.contactFirstNameInput.value.trim();
+    const firstName = getVal('contact-firstName');
     const contactData = {
         // Allgemein
         lastName: lastName,
         firstName: firstName,
         name: `${firstName} ${lastName}`.trim(), // Kombiniertes Feld für Suche
-        nickname: dom.contactNicknameInput.value.trim(),
-        birthday: dom.contactBirthdayInput.value,
-        category: dom.contactCategoryInput.value,
-        url: dom.contactUrlInput.value.trim(),
-        notes: dom.contactNotesInput.value.trim(),
+        nickname: getVal('contact-nickname'),
+        birthday: document.getElementById(`contact-birthday-${tabId}`)?.value || '',
+        category: document.getElementById(`contact-category-${tabId}`)?.value || '',
+        url: getVal('contact-url'),
+        notes: getVal('contact-notes'),
 
         // Privat
         email: email,
-        phone: dom.contactPhoneInput.value.trim(),
-        mobile: dom.contactMobileInput.value.trim(),
-        street: dom.contactStreetInput.value.trim(),
+        phone: getVal('contact-phone'),
+        mobile: getVal('contact-mobile'),
+        street: getVal('contact-street'),
         zip: zip,
-        city: dom.contactCityInput.value.trim(),
+        city: getVal('contact-city'),
 
         // Beruflich
-        company: dom.contactCompanyInput.value.trim(),
-        title: dom.contactTitleInput.value.trim(),
-        role: dom.contactRoleInput ? dom.contactRoleInput.value.trim() : '',
-        workEmail: dom.contactWorkEmailInput.value.trim(),
-        workPhone: dom.contactWorkPhoneInput.value.trim(),
-        workMobile: dom.contactWorkMobileInput.value.trim(),
-        workStreet: dom.contactWorkStreetInput.value.trim(),
-        workZip: dom.contactWorkZipInput.value.trim(),
-        workCity: dom.contactWorkCityInput.value.trim(),
+        company: getVal('contact-company'),
+        title: getVal('contact-title'),
+        role: getVal('contact-role'),
+        workEmail: workEmail,
+        workPhone: getVal('contact-workPhone'),
+        workMobile: getVal('contact-workMobile'),
+        workStreet: getVal('contact-workStreet'),
+        workZip: workZip,
+        workCity: getVal('contact-workCity'),
 
-        // Social Media Badges
-        socialMedia: getSocialMediaDataFromBadges(),
+        // Social Media Badges - need to get from specific tab
+        socialMedia: getSocialMediaDataFromBadges(tabId),
     };
 
     // Check for duplicates (exclude current contact if editing)
@@ -173,7 +133,7 @@ export function saveContact(e) {
         const isNewContact = !id;
 
         // Show custom duplicate dialog instead of confirm()
-        showDuplicateDialog(duplicate, contactData, isNewContact);
+        showDuplicateDialog(duplicate, contactData, isNewContact, tabId);
         return; // Don't save yet, wait for user decision
     }
 
@@ -183,26 +143,42 @@ export function saveContact(e) {
         const index = state.contacts.findIndex(c => c.id == id);
         if (index !== -1) {
             // Behalte den Favoritenstatus bei
-            state.contacts[index] = { ...state.contacts[index], ...contactData };
+            const updatedContact = { ...state.contacts[index], ...contactData };
+            state.contacts[index] = updatedContact;
             // Force re-render by creating new array
             state.contacts = [...state.contacts];
+            // Update tab title if name changed
+            updateTabTitle(tabId, updatedContact.name);
         }
     } else {
         // Neu
         contactData.id = state.nextId++;
         contactData.isFavorite = false;
-        state.contacts = [...state.contacts, contactData];
+        const newContact = { ...contactData, socialMedia: contactData.socialMedia || [] };
+        state.contacts = [...state.contacts, newContact];
+        // Update tab title from "Neuer Kontakt" to the actual name
+        updateTabTitle(tabId, newContact.name);
+        // Update the tab's contactId from temporary to permanent
+        updateTabContactId(tabId, newContact.id);
     }
 
-    closeModal();
+    // Close tab and return to list (SYNCHRONOUS now - imported at top)
+    closeTab(tabId);
+    state.activeView = 'list';
     showNotification(id ? 'Kontakt aktualisiert.' : 'Kontakt erstellt.');
 }
 
 /**
  * Deletes a contact by ID.
+ * Also closes any tabs that have this contact open.
+ * FIX: Closes tabs BEFORE deleting to prevent ghost tabs
  */
 export function deleteContact(id) {
     if (confirm('Möchten Sie diesen Kontakt wirklich löschen?')) {
+        // CRITICAL: Close tabs FIRST (synchronous) to avoid ghost tabs
+        closeTabsByContactId(id);
+
+        // Then delete the contact from state
         state.contacts = state.contacts.filter(c => c.id !== id);
         showNotification('Kontakt gelöscht.');
     }

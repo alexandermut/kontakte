@@ -1,7 +1,5 @@
 import { state, dom } from './state.js';
 import {
-    openModal,
-    closeModal,
     saveContact,
     deleteContact,
     toggleFavorite,
@@ -16,6 +14,7 @@ import { exportContacts, importVCF } from './vcf-handler.js';
 import { debounce } from './utils.js';
 import { persistSort } from './storage.js';
 import { closeMergeModal, confirmMerge, closeDuplicateDialog, handleDuplicateMerge, handleDuplicateCancel } from './merge.js';
+import { openTab, closeTab, switchToTab } from './tabs.js';
 
 export function setupEventListeners() {
     console.log("Event Listeners werden eingerichtet...");
@@ -55,7 +54,7 @@ export function setupEventListeners() {
     });
 
     // Toolbar Buttons
-    dom.newContactBtn.addEventListener('click', () => openModal());
+    dom.newContactBtn.addEventListener('click', () => openTab(null));
     dom.importBtn.addEventListener('click', () => dom.vcfInput.click());
     dom.exportBtn.addEventListener('click', exportContacts);
     dom.exportSelectedBtn.addEventListener('click', exportSelectedContacts);
@@ -63,41 +62,36 @@ export function setupEventListeners() {
     dom.themeToggle.addEventListener('click', toggleTheme);
     dom.vcfInput.addEventListener('change', importVCF);
 
-    // Modal
-    dom.contactForm.addEventListener('submit', saveContact);
-    dom.modal.addEventListener('click', (e) => {
-        if (e.target === dom.modal) closeModal();
-    });
-    document.getElementById('modal-close-header-btn').addEventListener('click', closeModal);
-    document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
-    dom.modalDeleteBtn.addEventListener('click', () => {
-        const contactId = parseInt(dom.contactIdInput.value, 10);
-        if (contactId) {
-            closeModal();
-            setTimeout(() => deleteContact(contactId), 150);
+    // Modal listeners removed - replaced by Tab system
+    // Form submit is handled dynamically in ui.js renderTabContainers()
+    // Cancel and Delete buttons are handled in contact-tabs listener below
+
+    // Form Tabs (now handled via event delegation since forms are dynamic)
+    document.addEventListener('click', (e) => {
+        const formTab = e.target.closest('.form-tab');
+        if (!formTab) return;
+
+        e.preventDefault();
+        const targetTab = formTab.dataset.tab;
+        const formId = formTab.dataset.form; // Get the specific form ID
+
+        if (!formId) return;
+        
+        // Only affect tabs and contents within this specific form
+        const formWrapper = document.querySelector(`.contact-form-wrapper[data-tab-id="${formId}"]`);
+        if (!formWrapper) return;
+
+        const formTabs = formWrapper.querySelectorAll(`.form-tab`);
+        const formTabContents = formWrapper.querySelectorAll(`[data-tab-content]`);
+
+        formTabs.forEach(t => t.classList.remove('active'));
+        formTabContents.forEach(c => c.classList.remove('active'));
+
+        formTab.classList.add('active');
+        const targetContent = formWrapper.querySelector(`[data-tab-content="${targetTab}"]`);
+        if (targetContent) {
+            targetContent.classList.add('active');
         }
-    });
-
-    // Form Tabs
-    const formTabs = document.querySelectorAll('.form-tab');
-    const formTabContents = document.querySelectorAll('.form-tab-content');
-
-    formTabs.forEach(tab => {
-        tab.addEventListener('click', (e) => {
-            e.preventDefault();
-            const targetTab = tab.dataset.tab;
-
-            // Remove active class from all tabs and contents
-            formTabs.forEach(t => t.classList.remove('active'));
-            formTabContents.forEach(c => c.classList.remove('active'));
-
-            // Add active class to clicked tab and corresponding content
-            tab.classList.add('active');
-            const targetContent = document.querySelector(`[data-tab-content="${targetTab}"]`);
-            if (targetContent) {
-                targetContent.classList.add('active');
-            }
-        });
     });
 
     // Duplicate Dialog
@@ -117,6 +111,56 @@ export function setupEventListeners() {
         if (e.target === mergeModal) closeMergeModal();
     });
 
+    // Contact Tabs (second-level tabs for open contacts)
+    const contactTabsNav = document.getElementById('contact-tabs');
+    contactTabsNav.addEventListener('click', (e) => {
+        // Tab switch (click on tab button itself)
+        const tabButton = e.target.closest('.contact-tab');
+        if (tabButton && !e.target.closest('.tab-close-btn')) {
+            const tabId = tabButton.dataset.tabId;
+            if (tabId) {
+                switchToTab(tabId);
+            }
+            return;
+        }
+
+        // Tab close (click on X button)
+        const closeBtn = e.target.closest('.tab-close-btn');
+        if (closeBtn) {
+            const tabId = closeBtn.dataset.tabId;
+            if (tabId) {
+                closeTab(tabId);
+            }
+        }
+    });
+
+    // Cancel and Delete buttons in tab forms (event delegation)
+    document.addEventListener('click', (e) => {
+        // Cancel button
+        const cancelBtn = e.target.closest('[id^="cancel-btn-"]');
+        if (cancelBtn) {
+            const tabId = cancelBtn.dataset.tabId;
+            if (tabId) {
+                closeTab(tabId);
+            }
+            return;
+        }
+
+        // Delete button
+        const deleteBtn = e.target.closest('[id^="delete-btn-"]');
+        if (deleteBtn) {
+            const tabId = deleteBtn.dataset.tabId;
+            if (!tabId) return;
+
+            const contactIdInput = document.getElementById(`contact-id-${tabId}`);
+            const contactId = contactIdInput ? parseInt(contactIdInput.value, 10) : null;
+
+            if (contactId) {
+                deleteContact(contactId);
+            }
+        }
+    });
+
     // Main Tabs (View Switching)
     const mainTabs = document.getElementById('main-tabs');
     mainTabs.addEventListener('click', (e) => {
@@ -131,28 +175,31 @@ export function setupEventListeners() {
 
     // Globale Tastatur-Shortcuts
     window.addEventListener('keydown', (e) => {
-        // Escape zum Schließen des Modals
-        if (e.key === 'Escape' && dom.modal.classList.contains('visible')) {
-            closeModal();
+        // FIX EDGE #3: Don't trigger shortcuts when user is typing in input/textarea
+        const isTyping = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
+
+        // Escape zum Schließen des aktiven Tabs (works even when typing)
+        if (e.key === 'Escape' && state.activeView === 'tab' && state.activeTabId) {
+            closeTab(state.activeTabId);
             return;
         }
 
-        // Strg/Cmd + N für neuen Kontakt
-        if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !dom.modal.classList.contains('visible')) {
+        // Strg/Cmd + N für neuen Kontakt (not when typing)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'n' && state.activeView !== 'tab' && !isTyping) {
             e.preventDefault();
-            openModal();
+            openTab(null);
             return;
         }
 
-        // Strg/Cmd + F für Suche fokussieren
-        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        // Strg/Cmd + F für Suche fokussieren (not when typing in other fields)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f' && !isTyping) {
             e.preventDefault();
             dom.searchInput.focus();
             return;
         }
 
-        // Strg/Cmd + E für Export
-        if ((e.ctrlKey || e.metaKey) && e.key === 'e' && !dom.modal.classList.contains('visible')) {
+        // Strg/Cmd + E für Export (not when typing)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'e' && state.activeView !== 'tab' && !isTyping) {
             e.preventDefault();
             exportContacts();
             return;
@@ -175,7 +222,7 @@ export function setupEventListeners() {
         if (editBtn) {
             const contact = state.contacts.find(c => c.id === contactId);
             if (contact) {
-                openModal(contact);
+                openTab(contact);
             }
             return;
         }
@@ -236,6 +283,6 @@ export function setupEventListeners() {
 
         const contactId = parseInt(contactItem.dataset.id, 10);
         const contact = state.contacts.find(c => c.id === contactId);
-        if (contact) openModal(contact);
+        if (contact) openTab(contact);
     });
 }

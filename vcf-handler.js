@@ -1,7 +1,31 @@
 import { state } from './state.js';
 import { showNotification } from './contacts.js';
-import { encodeQuotedPrintable, decodeQuotedPrintable } from './utils.js';
+import { encodeQuotedPrintable, decodeQuotedPrintable, repairMojibake } from './utils.js';
 import { findDuplicate } from './utils.js';
+
+/**
+ * Escapes VCF special characters in a string value.
+ * According to RFC 2426, backslashes, commas, and semicolons must be escaped.
+ * @param {string} value The string to escape.
+ * @returns {string} The escaped string.
+ */
+const escapeVcfValue = (value) => {
+    if (typeof value !== 'string') return '';
+    // CRITICAL: Backslash must be escaped FIRST, otherwise we'd escape our own escape chars!
+    return value.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;');
+};
+
+/**
+ * Unescapes VCF special characters in a string value.
+ * Reverses the escaping done by escapeVcfValue().
+ * @param {string} value The string to unescape.
+ * @returns {string} The unescaped string.
+ */
+const unescapeVcfValue = (value) => {
+    if (typeof value !== 'string') return '';
+    // CRITICAL: Must unescape in REVERSE order (semicolon, comma, then backslash)
+    return value.replace(/\\;/g, ';').replace(/\\,/g, ',').replace(/\\\\/g, '\\');
+};
 
 /**
  * Exports given contacts array as a VCF file.
@@ -14,107 +38,67 @@ export function exportContactsToVCF(contacts, filename = 'contacts.vcf') {
 
     let vcfString = '';
     contacts.forEach(contact => {
-        // Helper to check if a field needs encoding
+        // Helper to check if a field needs encoding (contains non-ASCII chars)
         const needsEncoding = (val) => val && /[^\x00-\x7F]/.test(val);
 
         vcfString += 'BEGIN:VCARD\r\nVERSION:3.0\r\n';
 
-        // Use Quoted-Printable for fields with special characters
-        const lastName = contact.lastName || '';
-        const firstName = contact.firstName || '';
+        // N and FN fields with escaping and encoding
+        const lastName = escapeVcfValue(contact.lastName || '');
+        const firstName = escapeVcfValue(contact.firstName || '');
         const nValue = `${lastName};${firstName};;;`;
-        const fnValue = `${firstName} ${lastName}`.trim();
+        // FN field must also be escaped (in case name contains special chars)
+        const fnValue = escapeVcfValue(`${contact.firstName || ''} ${contact.lastName || ''}`.trim());
 
-        vcfString += needsEncoding(nValue)
-            ? `N;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(nValue)}\r\n`
-            : `N:${nValue}\r\n`;
-        vcfString += needsEncoding(fnValue)
-            ? `FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(fnValue)}\r\n`
-            : `FN:${fnValue}\r\n`;
+        vcfString += `N;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(nValue)}\r\n`;
+        vcfString += `FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(fnValue)}\r\n`;
 
-        // Nickname
-        if (contact.nickname) {
-            vcfString += needsEncoding(contact.nickname)
-                ? `NICKNAME;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(contact.nickname)}\r\n`
-                : `NICKNAME:${contact.nickname}\r\n`;
-        }
+        // Generic field handler
+        const addField = (field, value) => {
+            if (!value) return;
+            const escapedValue = escapeVcfValue(value);
+            if (needsEncoding(escapedValue)) {
+                vcfString += `${field};CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(escapedValue)}\r\n`;
+            } else {
+                vcfString += `${field}:${escapedValue}\r\n`;
+            }
+        };
 
-        // Title/Position
-        if (contact.title) {
-            vcfString += needsEncoding(contact.title)
-                ? `TITLE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(contact.title)}\r\n`
-                : `TITLE:${contact.title}\r\n`;
-        }
+        addField('NICKNAME', contact.nickname);
+        addField('TITLE', contact.title);
+        addField('ROLE', contact.role);
+        addField('ORG', contact.company);
 
-        // Role/Function
-        if (contact.role) {
-            vcfString += needsEncoding(contact.role)
-                ? `ROLE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(contact.role)}\r\n`
-                : `ROLE:${contact.role}\r\n`;
-        }
+        if (contact.email) vcfString += `EMAIL;TYPE=INTERNET,HOME:${escapeVcfValue(contact.email)}\r\n`;
+        if (contact.phone) vcfString += `TEL;TYPE=HOME,VOICE:${escapeVcfValue(contact.phone)}\r\n`;
+        if (contact.mobile) vcfString += `TEL;TYPE=HOME,CELL:${escapeVcfValue(contact.mobile)}\r\n`;
+        if (contact.workEmail) vcfString += `EMAIL;TYPE=INTERNET,WORK:${escapeVcfValue(contact.workEmail)}\r\n`;
+        if (contact.workPhone) vcfString += `TEL;TYPE=WORK,VOICE:${escapeVcfValue(contact.workPhone)}\r\n`;
+        if (contact.workMobile) vcfString += `TEL;TYPE=WORK,CELL:${escapeVcfValue(contact.workMobile)}\r\n`;
 
-        // Organization
-        if (contact.company) {
-            vcfString += needsEncoding(contact.company)
-                ? `ORG;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(contact.company)}\r\n`
-                : `ORG:${contact.company}\r\n`;
-        }
-
-        // Private Email & Phone
-        if (contact.email) vcfString += `EMAIL;TYPE=INTERNET,HOME:${contact.email}\r\n`;
-        if (contact.phone) vcfString += `TEL;TYPE=HOME,VOICE:${contact.phone}\r\n`;
-        if (contact.mobile) vcfString += `TEL;TYPE=HOME,CELL:${contact.mobile}\r\n`;
-
-        // Work Email & Phone
-        if (contact.workEmail) vcfString += `EMAIL;TYPE=INTERNET,WORK:${contact.workEmail}\r\n`;
-        if (contact.workPhone) vcfString += `TEL;TYPE=WORK,VOICE:${contact.workPhone}\r\n`;
-        if (contact.workMobile) vcfString += `TEL;TYPE=WORK,CELL:${contact.workMobile}\r\n`;
-
-        // Private Address
+        // Addresses with escaping
         if (contact.street || contact.city || contact.zip) {
-            const adrValue = `;;${contact.street || ''};${contact.city || ''};;${contact.zip || ''};`;
-            vcfString += needsEncoding(adrValue)
-                ? `ADR;TYPE=HOME;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(adrValue)}\r\n`
-                : `ADR;TYPE=HOME:${adrValue}\r\n`;
+            const adrValue = `;;${escapeVcfValue(contact.street || '')};${escapeVcfValue(contact.city || '')};;${escapeVcfValue(contact.zip || '')};`;
+            vcfString += `ADR;TYPE=HOME;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(adrValue)}\r\n`;
         }
-
-        // Work Address
         if (contact.workStreet || contact.workCity || contact.workZip) {
-            const adrValue = `;;${contact.workStreet || ''};${contact.workCity || ''};;${contact.workZip || ''};`;
-            vcfString += needsEncoding(adrValue)
-                ? `ADR;TYPE=WORK;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(adrValue)}\r\n`
-                : `ADR;TYPE=WORK:${adrValue}\r\n`;
+            const adrValue = `;;${escapeVcfValue(contact.workStreet || '')};${escapeVcfValue(contact.workCity || '')};;${escapeVcfValue(contact.workZip || '')};`;
+            vcfString += `ADR;TYPE=WORK;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(adrValue)}\r\n`;
         }
 
-        if (contact.category) {
-            vcfString += `CATEGORIES:${contact.category}\r\n`;
-        }
+        if (contact.category) vcfString += `CATEGORIES:${escapeVcfValue(contact.category)}\r\n`;
+        if (contact.birthday) vcfString += `BDAY:${contact.birthday.replace(/-/g, '')}\r\n`;
+        if (contact.url) vcfString += `URL:${escapeVcfValue(contact.url)}\r\n`;
 
-        if (contact.birthday) {
-            // VCF format for birthday: BDAY:YYYY-MM-DD or YYYYMMDD
-            const formatted = contact.birthday.replace(/-/g, '');
-            vcfString += `BDAY:${formatted}\r\n`;
-        }
-
-        // URL (Website)
-        if (contact.url) {
-            vcfString += `URL:${contact.url}\r\n`;
-        }
-
-        // Notes
         if (contact.notes) {
-            // NOTE field can contain line breaks, encode them properly
-            const notesEncoded = contact.notes.replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\n');
-            vcfString += needsEncoding(notesEncoded)
-                ? `NOTE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:${encodeQuotedPrintable(notesEncoded)}\r\n`
-                : `NOTE:${notesEncoded}\r\n`;
+            const notesEncoded = contact.notes.replace(/\r\n|\n|\r/g, '\\n');
+            addField('NOTE', notesEncoded);
         }
 
-        // Social Media Profiles (X-SOCIALPROFILE extension)
         if (contact.socialMedia && contact.socialMedia.length > 0) {
             contact.socialMedia.forEach(social => {
                 if (social.platform && social.username) {
-                    vcfString += `X-SOCIALPROFILE;TYPE=${social.platform}:${social.username}\r\n`;
+                    vcfString += `X-SOCIALPROFILE;TYPE=${escapeVcfValue(social.platform)}:${escapeVcfValue(social.username)}\r\n`;
                 }
             });
         }
@@ -130,75 +114,62 @@ export function exportContactsToVCF(contacts, filename = 'contacts.vcf') {
     URL.revokeObjectURL(link.href);
 }
 
-/**
- * Exports all contacts as a VCF file.
- */
 export function exportContacts() {
     exportContactsToVCF(state.contacts);
     showNotification('Kontakte exportiert.');
 }
 
-/**
- * Imports contacts from a VCF file.
- */
 export function importVCF(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-        const text = e.target.result;
+        let text = e.target.result;
+        text = text.replace(/(\r\n|\n)[ \t]/g, ''); // Unfold multi-line fields
+
+        // Repair common Mojibake (UTF-8 interpreted as MacRoman/Windows-1252)
+        text = repairMojibake(text);
+
         const vcards = text.split('BEGIN:VCARD');
-        let importedCount = 0;
-        let skippedCount = 0;
-        let replacedCount = 0;
+        let importedCount = 0, skippedCount = 0, replacedCount = 0;
 
         vcards.forEach(vcardText => {
             if (!vcardText.trim()) return;
 
-            // Helper to get a field value, decoding it if necessary
-            const getVcfField = (field) => {
-                const regex = new RegExp(`^${field}(;[^:]*)?:(.*)$`, 'im');
-                const match = vcardText.match(regex);
-                if (!match) return null;
+            const getVcfField = (fieldName, type) => {
+                const lines = vcardText.split(/\r\n|\n/);
+                for (const line of lines) {
+                    const regex = new RegExp(`^${fieldName}(;[^:]*)?:(.*)$`, 'i');
+                    const match = line.match(regex);
+                    if (match) {
+                        const params = match[1] || '';
 
-                const params = match[1] || '';
-                let value = match[2].trim();
+                        if (type) {
+                            // Support both "TYPE=WORK" and shorthand ";WORK"
+                            const typeRegex = new RegExp(`(TYPE=.*${type}|;${type}(;|$))`, 'i');
+                            if (!typeRegex.test(params)) continue;
+                        }
+                        let value = match[2].trim();
+                        let charset = 'utf-8';
+                        const charsetMatch = params.match(/CHARSET=([^;:]*)/i);
+                        if (charsetMatch) charset = charsetMatch[1];
 
-                if (params.includes('ENCODING=QUOTED-PRINTABLE')) {
-                    value = decodeQuotedPrintable(value);
+                        // First: decode Quoted-Printable (if needed)
+                        if (params.includes('ENCODING=QUOTED-PRINTABLE')) {
+                            value = decodeQuotedPrintable(value, charset);
+                        }
+
+                        // Then: unescape VCF special characters (\, \; \\ etc.)
+                        value = unescapeVcfValue(value);
+
+                        return value;
+                    }
                 }
-                return value;
+                return null;
             };
 
-            const contact = {
-                id: state.nextId,
-                firstName: '',
-                lastName: '',
-                name: '',
-                nickname: '',
-                title: '',
-                role: '',
-                company: '',
-                email: '',
-                phone: '',
-                mobile: '',
-                workEmail: '',
-                workPhone: '',
-                workMobile: '',
-                street: '',
-                zip: '',
-                city: '',
-                workStreet: '',
-                workZip: '',
-                workCity: '',
-                category: '',
-                birthday: '',
-                url: '',
-                notes: '',
-                socialMedia: [],
-                isFavorite: false
-            };
+            const contact = { id: state.nextId, isFavorite: false, socialMedia: [] };
 
             const nValue = getVcfField('N');
             if (nValue) {
@@ -211,166 +182,91 @@ export function importVCF(event) {
                 const fnValue = getVcfField('FN');
                 if (fnValue) {
                     const parts = fnValue.split(' ');
-                    contact.firstName = parts.slice(0, -1).join(' ');
-                    contact.lastName = parts[parts.length - 1];
+                    contact.lastName = parts.pop();
+                    contact.firstName = parts.join(' ');
                 }
             }
 
-            // Generate combined name field
-            contact.name = `${contact.firstName} ${contact.lastName}`.trim();
+            contact.name = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+            contact.nickname = getVcfField('NICKNAME');
+            contact.title = getVcfField('TITLE');
+            contact.role = getVcfField('ROLE');
+            contact.company = getVcfField('ORG');
+            contact.email = getVcfField('EMAIL', 'HOME') || getVcfField('EMAIL');
+            contact.workEmail = getVcfField('EMAIL', 'WORK');
+            contact.phone = getVcfField('TEL', 'HOME');
+            contact.mobile = getVcfField('TEL', 'CELL');
+            contact.workPhone = getVcfField('TEL', 'WORK');
+            contact.workMobile = getVcfField('TEL', 'WORK.*CELL');
 
-            contact.nickname = getVcfField('NICKNAME') || '';
-
-            // Helper to get field with specific TYPE
-            const getVcfFieldWithType = (field, type) => {
-                const regex = new RegExp(`^${field}[^:]*TYPE[^:]*${type}[^:]*:(.*)$`, 'im');
-                const match = vcardText.match(regex);
-                if (!match) return null;
-                let value = match[1].trim();
-                if (match[0].includes('ENCODING=QUOTED-PRINTABLE')) {
-                    value = decodeQuotedPrintable(value);
-                }
-                return value;
-            };
-
-            contact.title = getVcfField('TITLE') || '';
-            contact.role = getVcfField('ROLE') || '';
-            contact.company = getVcfField('ORG') || '';
-
-            // Emails - prioritize HOME vs WORK
-            contact.email = getVcfFieldWithType('EMAIL', 'HOME') || getVcfField('EMAIL') || '';
-            contact.workEmail = getVcfFieldWithType('EMAIL', 'WORK') || '';
-
-            // Phones - prioritize based on TYPE
-            contact.phone = getVcfFieldWithType('TEL', 'HOME') || '';
-            contact.mobile = getVcfFieldWithType('TEL', 'HOME.*CELL') || getVcfFieldWithType('TEL', 'CELL') || '';
-            contact.workPhone = getVcfFieldWithType('TEL', 'WORK.*VOICE') || getVcfFieldWithType('TEL', 'WORK') || '';
-            contact.workMobile = getVcfFieldWithType('TEL', 'WORK.*CELL') || '';
-
-            // Fallback: if no type-specific phone found, use generic TEL
-            if (!contact.phone && !contact.mobile && !contact.workPhone && !contact.workMobile) {
-                contact.phone = getVcfField('TEL') || '';
+            const adrHome = getVcfField('ADR', 'HOME') || getVcfField('ADR');
+            if (adrHome) {
+                const parts = adrHome.split(';');
+                contact.street = parts[2];
+                contact.city = parts[3];
+                contact.zip = parts[5];
             }
 
-            // Private Address (TYPE=HOME or no type)
-            const adrHomeValue = getVcfFieldWithType('ADR', 'HOME');
-            if (adrHomeValue) {
-                const adrParts = adrHomeValue.split(';');
-                contact.street = adrParts[2] || '';
-                contact.city = adrParts[3] || '';
-                contact.zip = adrParts[5] || '';
-            } else {
-                // Fallback to any ADR field
-                const adrValue = getVcfField('ADR');
-                if (adrValue) {
-                    const adrParts = adrValue.split(';');
-                    contact.street = adrParts[2] || '';
-                    contact.city = adrParts[3] || '';
-                    contact.zip = adrParts[5] || '';
-                }
+            const adrWork = getVcfField('ADR', 'WORK');
+            if (adrWork) {
+                const parts = adrWork.split(';');
+                contact.workStreet = parts[2];
+                contact.workCity = parts[3];
+                contact.workZip = parts[5];
             }
 
-            // Work Address (TYPE=WORK)
-            const adrWorkValue = getVcfFieldWithType('ADR', 'WORK');
-            if (adrWorkValue) {
-                const adrParts = adrWorkValue.split(';');
-                contact.workStreet = adrParts[2] || '';
-                contact.workCity = adrParts[3] || '';
-                contact.workZip = adrParts[5] || '';
+            contact.category = getVcfField('CATEGORIES');
+            const bday = getVcfField('BDAY');
+            if (bday && bday.length === 8) {
+                contact.birthday = `${bday.slice(0, 4)}-${bday.slice(4, 6)}-${bday.slice(6, 8)}`;
+            } else if (bday) {
+                contact.birthday = bday;
             }
 
-            contact.category = getVcfField('CATEGORIES') || '';
+            contact.url = getVcfField('URL');
+            const note = getVcfField('NOTE');
+            if (note) contact.notes = note.replace(/\\n/g, '\n');
 
-            // Parse birthday (BDAY field can be YYYYMMDD or YYYY-MM-DD)
-            const bdayValue = getVcfField('BDAY');
-            if (bdayValue) {
-                // Convert YYYYMMDD to YYYY-MM-DD if needed
-                if (bdayValue.length === 8 && !bdayValue.includes('-')) {
-                    contact.birthday = `${bdayValue.substring(0, 4)}-${bdayValue.substring(4, 6)}-${bdayValue.substring(6, 8)}`;
-                } else {
-                    contact.birthday = bdayValue;
-                }
-            }
-
-            // URL (Website)
-            contact.url = getVcfField('URL') || '';
-
-            // Notes - decode \n back to line breaks
-            const notesValue = getVcfField('NOTE');
-            if (notesValue) {
-                contact.notes = notesValue.replace(/\\n/g, '\n');
-            }
-
-            // Social Media Profiles (X-SOCIALPROFILE)
-            contact.socialMedia = [];
             const socialRegex = /^X-SOCIALPROFILE[^:]*TYPE[^:]*=([^:;]+)[^:]*:(.*)$/gim;
             let socialMatch;
             while ((socialMatch = socialRegex.exec(vcardText)) !== null) {
-                const platform = socialMatch[1].trim();
-                const username = socialMatch[2].trim();
-                if (platform && username) {
-                    contact.socialMedia.push({ platform, username });
-                }
+                contact.socialMedia.push({ platform: socialMatch[1].trim(), username: socialMatch[2].trim() });
             }
 
-            // Skip contacts without last name
-            if (!contact.lastName) {
-                return;
-            }
+            if (!contact.lastName && !contact.firstName) return; // Skip empty contacts
 
-            // Check for duplicates
             const duplicate = findDuplicate(contact, state.contacts);
-
             if (duplicate) {
-                // Ask user what to do with duplicate
                 const name = `${contact.firstName} ${contact.lastName}`.trim();
-                const action = confirm(
-                    `Duplikat gefunden: "${name}"\n\n` +
-                    `Ein Kontakt mit diesem Namen oder dieser E-Mail/Telefonnummer existiert bereits.\n\n` +
-                    `OK = Ersetzen (alte Daten werden überschrieben)\n` +
-                    `Abbrechen = Überspringen (Import überspringen)`
-                );
-
+                const action = confirm(`Duplikat gefunden: "${name}"\n\nOK = Ersetzen\nAbbrechen = Überspringen`);
                 if (action) {
-                    // Replace: Find index and update
                     const index = state.contacts.findIndex(c => c.id === duplicate.id);
                     if (index !== -1) {
-                        // Keep the old ID and favorite status
                         contact.id = duplicate.id;
                         contact.isFavorite = duplicate.isFavorite;
-                        state.contacts[index] = contact;
+                        state.contacts[index] = { ...state.contacts[index], ...contact };
                         replacedCount++;
                     }
                 } else {
-                    // Skip
                     skippedCount++;
                 }
             } else {
-                // No duplicate, add as new contact
                 state.contacts = [...state.contacts, contact];
                 state.nextId++;
                 importedCount++;
             }
         });
 
-        // Force re-render if we replaced contacts
-        if (replacedCount > 0) {
-            state.contacts = [...state.contacts];
-        }
+        if (replacedCount > 0) state.contacts = [...state.contacts];
 
-        // Show summary notification
         const messages = [];
         if (importedCount > 0) messages.push(`${importedCount} neu`);
         if (replacedCount > 0) messages.push(`${replacedCount} ersetzt`);
         if (skippedCount > 0) messages.push(`${skippedCount} übersprungen`);
-
-        if (messages.length > 0) {
-            showNotification(`Import abgeschlossen: ${messages.join(', ')}`);
-        } else {
-            showNotification('Keine Kontakte importiert.');
-        }
+        showNotification(messages.length > 0 ? `Import: ${messages.join(', ')}` : 'Keine Kontakte importiert.');
         event.target.value = null;
     };
-
-    reader.readAsText(file);
+    // Explicitly read as UTF-8 (default is platform-dependent)
+    // This ensures umlauts are correctly interpreted even without ENCODING=QUOTED-PRINTABLE
+    reader.readAsText(file, 'UTF-8');
 }

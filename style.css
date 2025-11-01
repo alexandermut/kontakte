@@ -1212,3 +1212,129 @@ body {
         font-size: 0.875rem;
     }
 }
+
+/* ===== Contact Tabs (zweite Ebene) ===== */
+.contact-tabs {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0 var(--spacing-lg);
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.contact-tabs.hidden {
+    display: none;
+}
+
+.contact-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    border-top: 2px solid transparent;
+    flex-shrink: 0;
+}
+
+.contact-tab:hover {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.contact-tab.active {
+    background-color: var(--bg-primary);
+    color: var(--color-primary);
+    border-top-color: var(--color-primary);
+}
+
+.tab-title {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tab-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: all 0.2s;
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.tab-close-btn:hover {
+    opacity: 1;
+    background-color: var(--color-danger);
+    color: white;
+}
+
+/* ===== Tab Container ===== */
+.tab-container {
+    padding: var(--spacing-xl);
+    overflow-y: auto;
+    max-height: calc(100vh - 250px);
+    background-color: var(--bg-primary);
+}
+
+.tab-container.hidden {
+    display: none;
+}
+
+.contact-form-wrapper {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.contact-form-wrapper.hidden {
+    display: none;
+}
+
+.contact-form {
+    width: 100%;
+}
+
+/* Form Footer (ersetzt modal-footer) */
+.form-footer {
+    display: flex;
+    gap: var(--spacing-sm);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    margin-top: var(--spacing-lg);
+}
+
+/* ===== Responsive Anpassungen für Tabs ===== */
+@media (max-width: 768px) {
+    .contact-tabs {
+        padding: 0 var(--spacing-sm);
+    }
+
+    .contact-tab {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.8125rem;
+    }
+
+    .tab-title {
+        max-width: 100px;
+    }
+
+    .tab-container {
+        padding: var(--spacing-md);
+        max-height: calc(100vh - 200px);
+    }
+}

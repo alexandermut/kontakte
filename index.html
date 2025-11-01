@@ -84,6 +84,16 @@
             <button type="button" class="main-tab" data-view="stats">Auswertung</button>
         </nav>
 
+        <!-- Kontakt-Tabs (zweite Ebene) -->
+        <nav id="contact-tabs" class="contact-tabs hidden">
+            <!-- Dynamisch gerendert -->
+        </nav>
+
+        <!-- Tab-Container (hält die Formulare für offene Tabs) -->
+        <div id="tab-container" class="tab-container hidden">
+            <!-- Dynamisch gerendert: ein Formular pro Tab -->
+        </div>
+
         <!-- Kontaktliste (bestehende Ansicht) -->
         <main id="list-view" class="contact-list-container">
             <div id="contact-list-header" class="contact-list-header"></div>
@@ -174,178 +184,7 @@
         </section>
     </div>
 
-    <!-- Modal für Kontakt erstellen/bearbeiten -->
-    <div id="modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="modal-title">Neuer Kontakt</h2>
-                <button id="modal-close-header-btn" class="icon-btn" aria-label="Schließen">
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-                    </svg>
-                </button>
-            </div>
-            <form id="contact-form">
-                <input type="hidden" id="contact-id">
-
-                <!-- Tab Navigation -->
-                <div class="form-tabs">
-                    <button type="button" class="form-tab active" data-tab="general">Allgemein</button>
-                    <button type="button" class="form-tab" data-tab="private">Privat</button>
-                    <button type="button" class="form-tab" data-tab="business">Beruflich</button>
-                </div>
-
-                <!-- Tab: Allgemein -->
-                <div class="form-tab-content active" data-tab-content="general">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="contact-firstName">Vorname</label>
-                            <input type="text" id="contact-firstName" placeholder="Max">
-                        </div>
-                        <div class="form-group">
-                            <label for="contact-lastName">Nachname *</label>
-                            <input type="text" id="contact-lastName" required placeholder="Mustermann">
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="contact-nickname">Spitzname</label>
-                            <input type="text" id="contact-nickname" placeholder="Maxi">
-                        </div>
-                        <div class="form-group">
-                            <label for="contact-birthday">Geburtstag</label>
-                            <input type="date" id="contact-birthday">
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="contact-category">Kategorie</label>
-                            <select id="contact-category">
-                                <option value="">Keine Kategorie</option>
-                                <option value="Familie">Familie</option>
-                                <option value="Freunde">Freunde</option>
-                                <option value="Arbeit">Arbeit</option>
-                                <option value="Geschäft">Geschäft</option>
-                                <option value="Sonstige">Sonstige</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="contact-url">Website</label>
-                            <input type="url" id="contact-url" placeholder="https://www.beispiel.de">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="contact-notes">Notizen</label>
-                        <textarea id="contact-notes" rows="3" placeholder="Persönliche Notizen..."></textarea>
-                    </div>
-
-                    <h4 class="form-section-title">Social Media Profile</h4>
-                    <p class="form-help-text">Doppelklick auf eine Plattform, um Benutzername hinzuzufügen</p>
-
-                    <!-- Social Media Badges -->
-                    <div id="social-media-badges" class="social-media-badges"></div>
-                </div>
-
-                <!-- Tab: Privat -->
-                <div class="form-tab-content" data-tab-content="private">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="contact-email">E-Mail (Privat)</label>
-                            <input type="email" id="contact-email" placeholder="max@beispiel.de">
-                        </div>
-                        <div class="form-group">
-                            <label for="contact-phone">Telefon (Privat)</label>
-                            <input type="tel" id="contact-phone" placeholder="+49 123 456789">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="contact-mobile">Mobiltelefon (Privat)</label>
-                        <input type="tel" id="contact-mobile" placeholder="+49 176 12345678">
-                    </div>
-
-                    <h4 class="form-section-title">Privatadresse</h4>
-                    <div class="form-group">
-                        <label for="contact-street">Straße & Hausnummer</label>
-                        <input type="text" id="contact-street" placeholder="Musterstraße 1">
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 0 0 30%;">
-                            <label for="contact-zip">PLZ</label>
-                            <input type="text" id="contact-zip" placeholder="12345" maxlength="5">
-                        </div>
-                        <div class="form-group" style="flex: 1;">
-                            <label for="contact-city">Ort</label>
-                            <input type="text" id="contact-city" placeholder="Musterstadt">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tab: Beruflich -->
-                <div class="form-tab-content" data-tab-content="business">
-                    <div class="form-group">
-                        <label for="contact-company">Firma</label>
-                        <input type="text" id="contact-company" placeholder="Beispiel GmbH">
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="contact-title">Titel / Position</label>
-                            <input type="text" id="contact-title" placeholder="Geschäftsführer">
-                        </div>
-                        <div class="form-group">
-                            <label for="contact-role">Rolle / Funktion</label>
-                            <input type="text" id="contact-role" placeholder="Projektleiter">
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="contact-workEmail">E-Mail (Geschäftlich)</label>
-                            <input type="email" id="contact-workEmail" placeholder="max.mustermann@firma.de">
-                        </div>
-                        <div class="form-group">
-                            <label for="contact-workPhone">Telefon (Geschäftlich)</label>
-                            <input type="tel" id="contact-workPhone" placeholder="+49 30 12345678">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="contact-workMobile">Mobiltelefon (Geschäftlich)</label>
-                        <input type="tel" id="contact-workMobile" placeholder="+49 151 12345678">
-                    </div>
-
-                    <h4 class="form-section-title">Geschäftsadresse</h4>
-                    <div class="form-group">
-                        <label for="contact-workStreet">Straße & Hausnummer</label>
-                        <input type="text" id="contact-workStreet" placeholder="Firmenstraße 10">
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group" style="flex: 0 0 30%;">
-                            <label for="contact-workZip">PLZ</label>
-                            <input type="text" id="contact-workZip" placeholder="12345" maxlength="5">
-                        </div>
-                        <div class="form-group" style="flex: 1;">
-                            <label for="contact-workCity">Ort</label>
-                            <input type="text" id="contact-workCity" placeholder="Berlin">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="modal-footer">
-                    <button type="button" id="modal-delete-btn" class="btn btn-danger hidden">Löschen</button>
-                    <div style="flex: 1;"></div>
-                    <button type="button" id="modal-cancel-btn" class="btn">Abbrechen</button>
-                    <button type="submit" class="btn btn-primary">Speichern</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <!-- Modal wurde durch Tab-System ersetzt. Formulare werden dynamisch im tab-container gerendert. -->
 
     <!-- Duplicate Confirmation Dialog -->
     <div id="duplicate-dialog" class="modal hidden">

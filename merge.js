@@ -1,5 +1,6 @@
 import { state } from './state.js';
-import { showNotification, closeModal as closeContactModal } from './contacts.js';
+import { showNotification } from './contacts.js';
+import { getActiveTab, closeTab } from './tabs.js';
 
 let currentMergeData = null;
 let pendingDuplicateData = null;
@@ -37,10 +38,11 @@ const MERGE_FIELDS = [
  * @param {Object} duplicate - The existing duplicate contact.
  * @param {Object} newContactData - The data of the contact being saved.
  * @param {boolean} isNewContact - True if creating a new contact.
+ * @param {string} tabId - The ID of the tab that triggered the save.
  */
-export function showDuplicateDialog(duplicate, newContactData, isNewContact) {
+export function showDuplicateDialog(duplicate, newContactData, isNewContact, tabId) {
     console.log('=== showDuplicateDialog called ===');
-    pendingDuplicateData = { duplicate, newContactData, isNewContact };
+    pendingDuplicateData = { duplicate, newContactData, isNewContact, tabId };
 
     const duplicateName = `${duplicate.firstName} ${duplicate.lastName}`.trim();
     const message = `Es existiert bereits ein Kontakt mit ähnlichen Daten:\n\n` +
@@ -70,9 +72,9 @@ export function closeDuplicateDialog() {
  */
 export function handleDuplicateMerge() {
     console.log('=== handleDuplicateMerge called ===');
-    const { duplicate, newContactData, isNewContact } = pendingDuplicateData;
+    const { duplicate, newContactData, isNewContact, tabId } = pendingDuplicateData;
     closeDuplicateDialog();
-    openMergeModal(duplicate, newContactData, isNewContact);
+    openMergeModal(duplicate, newContactData, isNewContact, tabId);
 }
 
 export const handleDuplicateCancel = closeDuplicateDialog;
@@ -82,17 +84,16 @@ export const handleDuplicateCancel = closeDuplicateDialog;
  * @param {Object} existingContact - The contact that already exists in the system
  * @param {Object} newContactData - The new contact data being added (may not have an ID yet)
  * @param {boolean} isNewContact - Whether the new data is from creating a new contact (vs editing)
+ * @param {string} tabId - The ID of the source tab.
  */
-export function openMergeModal(existingContact, newContactData, isNewContact = true) {
+export function openMergeModal(existingContact, newContactData, isNewContact = true, tabId) {
     currentMergeData = {
         existing: existingContact,
         new: newContactData,
         selected: {},
-        isNewContact: isNewContact
+        isNewContact: isNewContact,
+        tabId: tabId // Store the tabId
     };
-
-    // Close contact modal first
-    closeContactModal();
 
     const modal = document.getElementById('merge-modal');
     const container = document.getElementById('merge-fields-container');
@@ -208,7 +209,12 @@ export function confirmMerge() {
         return;
     }
 
-    const { existing, selected, isNewContact, new: newContactData } = currentMergeData;
+    const { existing, selected, isNewContact, new: newContactData, tabId } = currentMergeData;
+
+    // Der Tab, aus dem der Merge ausgelöst wurde (entweder ein "Neuer Kontakt"-Tab oder ein bearbeiteter Tab)
+    if (tabId) {
+        closeTab(tabId);
+    }
 
     console.log('Existing contact:', existing);
     console.log('Selected values:', selected);

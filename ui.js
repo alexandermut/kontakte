@@ -1,6 +1,9 @@
 import { state, dom } from './state.js';
 import { escapeHTML, sortContacts } from './utils.js';
 import { filterContacts } from './filters.js';
+import { getContactFormTemplate } from './contact-form-template.js';
+import { getActiveTab, getActiveTabContact } from './tabs.js';
+import { renderSocialBadges } from './social-media-badges.js';
 
 /**
  * Renders the entire application UI based on the current state.
@@ -20,6 +23,10 @@ export function render() {
     } else if (state.activeView === 'stats') {
         showStatsView();
         renderStats();
+    } else if (state.activeView === 'tab') {
+        showTabView();
+        renderContactTabs();
+        renderTabContainers();
     }
 }
 
@@ -38,29 +45,39 @@ function updateTabActiveState() {
 }
 
 /**
- * Shows the list view and hides the stats view
+ * Shows the list view and hides other views
  */
 function showListView() {
     const listView = document.getElementById('list-view');
     const statsView = document.getElementById('stats-view');
     const toolbar = document.querySelector('.toolbar');
+    const contactTabs = document.getElementById('contact-tabs');
+    const tabContainer = document.getElementById('tab-container');
 
     listView.classList.remove('hidden');
-    statsView.classList.add('hidden');
     toolbar.classList.remove('hidden');
+    
+    statsView.classList.add('hidden');
+    contactTabs.classList.add('hidden');
+    tabContainer.classList.add('hidden');
 }
 
 /**
- * Shows the stats view and hides the list view
+ * Shows the stats view and hides other views
  */
 function showStatsView() {
     const listView = document.getElementById('list-view');
     const statsView = document.getElementById('stats-view');
     const toolbar = document.querySelector('.toolbar');
+    const contactTabs = document.getElementById('contact-tabs');
+    const tabContainer = document.getElementById('tab-container');
+
+    statsView.classList.remove('hidden');
 
     listView.classList.add('hidden');
-    statsView.classList.remove('hidden');
     toolbar.classList.add('hidden');
+    contactTabs.classList.add('hidden');
+    tabContainer.classList.add('hidden');
 }
 
 /**
@@ -278,4 +295,171 @@ function renderHeader() {
         
         dom.contactListHeader.appendChild(headerEl);
     });
+}
+
+/**
+ * Shows the tab view and hides list/stats views
+ */
+function showTabView() {
+    const listView = document.getElementById('list-view');
+    const statsView = document.getElementById('stats-view');
+    const toolbar = document.querySelector('.toolbar');
+    const contactTabs = document.getElementById('contact-tabs');
+    const tabContainer = document.getElementById('tab-container');
+
+    listView.classList.add('hidden');
+    statsView.classList.add('hidden');
+    toolbar.classList.add('hidden');
+    contactTabs.classList.remove('hidden');
+    tabContainer.classList.remove('hidden');
+}
+
+/**
+ * Renders the contact tabs navigation (second level tabs)
+ */
+function renderContactTabs() {
+    const contactTabsNav = document.getElementById('contact-tabs');
+    contactTabsNav.innerHTML = '';
+
+    state.openTabs.forEach(tab => {
+        const tabButton = document.createElement('button');
+        tabButton.type = 'button';
+        tabButton.className = `contact-tab ${tab.id === state.activeTabId ? 'active' : ''}`;
+        tabButton.dataset.tabId = tab.id;
+
+        tabButton.innerHTML = `
+            <span class="tab-title">${escapeHTML(tab.title)}</span>
+            <span class="tab-close-btn" data-tab-id="${tab.id}">×</span>
+        `;
+
+        contactTabsNav.appendChild(tabButton);
+    });
+}
+
+/**
+ * Renders all tab containers with their forms
+ * IMPORTANT: Only fills forms for NEWLY created tabs to preserve user input
+ */
+function renderTabContainers() {
+    const tabContainer = document.getElementById('tab-container');
+
+    // Get existing form IDs to avoid re-creating them
+    const existingForms = new Set(
+        Array.from(tabContainer.querySelectorAll('.contact-form-wrapper'))
+            .map(wrapper => wrapper.dataset.tabId)
+    );
+
+    // Create forms for NEW tabs only
+    state.openTabs.forEach(tab => {
+        if (!existingForms.has(tab.id)) {
+            // Create new form for this tab
+            const formWrapper = document.createElement('div');
+            formWrapper.className = `contact-form-wrapper ${tab.id === state.activeTabId ? '' : 'hidden'}`;
+            formWrapper.dataset.tabId = tab.id;
+            formWrapper.innerHTML = getContactFormTemplate(tab.id);
+            tabContainer.appendChild(formWrapper);
+
+            // Formular nur beim Erstellen befüllen, um User-Eingaben nicht zu überschreiben
+            const isNewContact = typeof tab.contactId === 'string' && tab.contactId.startsWith('new-');
+            const contact = isNewContact ? null : state.contacts.find(c => c.id === tab.contactId);
+
+            // Add form submit listener
+            const form = formWrapper.querySelector('form');
+            form.addEventListener('submit', (e) => {
+                // WICHTIG: e.preventDefault() MUSS synchron aufgerufen werden,
+                // um das Neuladen der Seite zu verhindern, bevor der asynchrone Import abgeschlossen ist.
+                e.preventDefault();
+                
+                // This will be handled by the global saveContact handler
+                import('./contacts.js').then(module => {
+                    module.saveContact(e);
+                });
+            });
+
+            // Erst nach dem Anhängen an den DOM befüllen
+            // FIX: Stellt sicher, dass das Formular existiert, bevor es befüllt wird.
+            if (contact !== undefined) {
+                fillTabForm(tab.id, contact);
+            }
+        }
+    });
+
+    // Remove forms for tabs that no longer exist
+    Array.from(tabContainer.querySelectorAll('.contact-form-wrapper')).forEach(wrapper => {
+        const tabId = wrapper.dataset.tabId;
+        if (!state.openTabs.find(tab => tab.id === tabId)) {
+            wrapper.remove();
+        }
+    });
+
+    // Show/hide forms based on active tab
+    Array.from(tabContainer.querySelectorAll('.contact-form-wrapper')).forEach(wrapper => {
+        if (wrapper.dataset.tabId === state.activeTabId) {
+            wrapper.classList.remove('hidden');
+        } else {
+            wrapper.classList.add('hidden');
+        }
+    });
+}
+
+/**
+ * Fills a tab's form with contact data
+ * @param {string} tabId - The tab ID
+ * @param {Object|null} contact - The contact data, or null for new contact
+ */
+function fillTabForm(tabId, contact) {
+    // Helper to get element by ID with tab suffix
+    const getEl = (id) => document.getElementById(`${id}-${tabId}`);
+
+    // Reset form first
+    const form = document.querySelector(`form[data-tab-id="${tabId}"]`);
+    if (form) form.reset();
+
+    if (contact) {
+        // Fill with contact data
+        const idInput = getEl('contact-id');
+        if (idInput) idInput.value = contact.id;
+
+        // Allgemein
+        if (getEl('contact-firstName')) getEl('contact-firstName').value = contact.firstName || '';
+        if (getEl('contact-lastName')) getEl('contact-lastName').value = contact.lastName || '';
+        if (getEl('contact-nickname')) getEl('contact-nickname').value = contact.nickname || '';
+        if (getEl('contact-birthday')) getEl('contact-birthday').value = contact.birthday || '';
+        if (getEl('contact-category')) getEl('contact-category').value = contact.category || '';
+        if (getEl('contact-url')) getEl('contact-url').value = contact.url || '';
+        if (getEl('contact-notes')) getEl('contact-notes').value = contact.notes || '';
+
+        // Privat
+        if (getEl('contact-email')) getEl('contact-email').value = contact.email || '';
+        if (getEl('contact-phone')) getEl('contact-phone').value = contact.phone || '';
+        if (getEl('contact-mobile')) getEl('contact-mobile').value = contact.mobile || '';
+        if (getEl('contact-street')) getEl('contact-street').value = contact.street || '';
+        if (getEl('contact-zip')) getEl('contact-zip').value = contact.zip || '';
+        if (getEl('contact-city')) getEl('contact-city').value = contact.city || '';
+
+        // Beruflich
+        if (getEl('contact-company')) getEl('contact-company').value = contact.company || '';
+        if (getEl('contact-title')) getEl('contact-title').value = contact.title || '';
+        if (getEl('contact-role')) getEl('contact-role').value = contact.role || '';
+        if (getEl('contact-workEmail')) getEl('contact-workEmail').value = contact.workEmail || '';
+        if (getEl('contact-workPhone')) getEl('contact-workPhone').value = contact.workPhone || '';
+        if (getEl('contact-workMobile')) getEl('contact-workMobile').value = contact.workMobile || '';
+        if (getEl('contact-workStreet')) getEl('contact-workStreet').value = contact.workStreet || '';
+        if (getEl('contact-workZip')) getEl('contact-workZip').value = contact.workZip || '';
+        if (getEl('contact-workCity')) getEl('contact-workCity').value = contact.workCity || '';
+
+        // Social Media Badges
+        renderSocialBadges(contact.socialMedia || [], tabId);
+
+        // Show delete button for existing contacts
+        const deleteBtn = document.getElementById(`delete-btn-${tabId}`);
+        if (deleteBtn) deleteBtn.classList.remove('hidden');
+    } else {
+        // New contact - empty form
+        renderSocialBadges([], tabId);
+
+        // Hide delete button for new contacts
+        const deleteBtn = document.getElementById(`delete-btn-${tabId}`);
+        if (deleteBtn) deleteBtn.classList.add('hidden');
+    }
 }

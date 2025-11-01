@@ -28,16 +28,34 @@ export function findDuplicate(newContact, existingContacts, excludeId = null) {
     const newWorkPhone = normalize(newContact.workPhone);
 
     return existingContacts.find(existing => {
-        // Exclude the contact being edited
-        if (excludeId && existing.id == excludeId) {
+        // Exclude the contact being edited (strict comparison - both should be numbers now)
+        if (excludeId !== null && excludeId !== undefined && existing.id === excludeId) {
             return false;
         }
 
-        // Check name match (both first and last name must match)
-        const nameMatch =
-            newFirstName && newLastName &&
-            normalize(existing.firstName) === newFirstName &&
-            normalize(existing.lastName) === newLastName;
+        // Check name match
+        // Strategy: lastName must match AND firstName must match (if both contacts have one)
+        // Examples:
+        //   "Max Müller" vs "Max Müller" → MATCH
+        //   "Müller" (no first) vs "Müller" (no first) → MATCH
+        //   "Max Müller" vs "Müller" (no first) → NO MATCH (different people)
+        //   "Max Müller" vs "Erika Müller" → NO MATCH (different people)
+        const bothHaveLastName = newLastName && normalize(existing.lastName);
+        const lastNamesMatch = normalize(existing.lastName) === newLastName;
+        const existingFirstName = normalize(existing.firstName);
+
+        let nameMatch = false;
+        if (bothHaveLastName && lastNamesMatch) {
+            // LastNames match - now check firstNames
+            if (newFirstName && existingFirstName) {
+                // Both have firstName - must match exactly
+                nameMatch = existingFirstName === newFirstName;
+            } else if (!newFirstName && !existingFirstName) {
+                // Both have NO firstName - match
+                nameMatch = true;
+            }
+            // else: one has firstName, other doesn't → NO MATCH
+        }
 
         // Check email match (any email matches)
         const emailMatch =
@@ -73,15 +91,67 @@ export function sortContacts(a, b) {
 }
 
 /**
+ * Repairs common Mojibake (encoding corruption) patterns.
+ * Detects UTF-8 text that was incorrectly interpreted as MacRoman/Windows-1252.
+ * @param {string} str The potentially corrupted string.
+ * @returns {string} The repaired string.
+ */
+export function repairMojibake(str) {
+    if (!str || typeof str !== 'string') return str;
+
+    // Common UTF-8 → MacRoman/Windows-1252 corruption patterns
+    const repairs = [
+        // German umlauts
+        { corrupted: /√ü/g, correct: 'ß' },      // ß (C3 9F)
+        { corrupted: /√∂/g, correct: 'ö' },      // ö (C3 B6)
+        { corrupted: /√§/g, correct: 'ä' },      // ä (C3 A4)
+        { corrupted: /√Ü/g, correct: 'Ö' },      // Ö (C3 96)
+        { corrupted: /√Ñ/g, correct: 'Ä' },      // Ä (C3 84)
+        { corrupted: /√º/g, correct: 'ü' },      // ü (C3 BC)
+        { corrupted: /√ú/g, correct: 'Ü' },      // Ü (C3 9C)
+
+        // Alternative patterns (Windows-1252 interpretation)
+        { corrupted: /Ã\u009F/g, correct: 'ß' },
+        { corrupted: /Ã¶/g, correct: 'ö' },
+        { corrupted: /Ã¤/g, correct: 'ä' },
+        { corrupted: /Ã–/g, correct: 'Ö' },
+        { corrupted: /Ã„/g, correct: 'Ä' },
+        { corrupted: /Ã¼/g, correct: 'ü' },
+        { corrupted: /Ãœ/g, correct: 'Ü' },
+
+        // Common European characters
+        { corrupted: /√©/g, correct: 'é' },
+        { corrupted: /√®/g, correct: 'è' },
+        { corrupted: /√™/g, correct: 'à' },
+    ];
+
+    let repaired = str;
+    let hadCorruption = false;
+
+    for (const { corrupted, correct } of repairs) {
+        if (corrupted.test(repaired)) {
+            repaired = repaired.replace(corrupted, correct);
+            hadCorruption = true;
+        }
+    }
+
+    if (hadCorruption) {
+        console.log(`Mojibake repaired: "${str}" → "${repaired}"`);
+    }
+
+    return repaired;
+}
+
+/**
  * Decodes a Quoted-Printable string, assuming UTF-8.
  * Handles "=HH" hex sequences and soft line breaks.
  * @param {string} str The string to decode.
  * @returns {string} The decoded string.
  */
-export function decodeQuotedPrintable(str) {
+export function decodeQuotedPrintable(str, charset = 'utf-8') {
     if (!str) return '';
     // 1. Replace soft line breaks (= at the end of a line)
-    const noSoftBreaks = str.replace(/=\r\n/g, '');
+    const noSoftBreaks = str.replace(/=\r\n/g, '').replace(/=\n/g, '');
 
     // 2. Convert =HH sequences to actual byte values
     const byteValues = [];
@@ -104,12 +174,23 @@ export function decodeQuotedPrintable(str) {
     // 3. Create a Uint8Array from the byte values
     const uint8Array = new Uint8Array(byteValues);
 
-    // 4. Use TextDecoder to interpret the Uint8Array as UTF-8
+    // 4. Use TextDecoder to interpret the Uint8Array
     try {
-        return new TextDecoder('utf-8').decode(uint8Array);
+        // Use the dynamic charset. TextDecoder is robust and handles many names.
+        return new TextDecoder(charset).decode(uint8Array);
     } catch (e) {
-        console.error("Fehler beim Dekodieren von Quoted-Printable (TextDecoder):", e);
-        return str; // Fallback to original string on error
+        console.error(`Fehler beim Dekodieren von Quoted-Printable mit Charset '${charset}':`, e);
+        // Fallback to utf-8 if the provided charset is invalid or fails
+        if (charset.toLowerCase() !== 'utf-8') {
+            try {
+                console.log('Versuche Fallback auf UTF-8...');
+                return new TextDecoder('utf-8').decode(uint8Array);
+            } catch (e2) {
+                console.error("Fehler beim Dekodieren von Quoted-Printable (UTF-8 Fallback):", e2);
+                return str; // Final fallback to original string
+            }
+        }
+        return str; // Fallback to original string if charset was already utf-8
     }
 }
 
@@ -132,7 +213,7 @@ export function encodeQuotedPrintable(str) {
         // but for simplicity and robustness in VCF, we might encode them if needed.
         // Here, we follow the general QP rule for bytes outside printable ASCII range or '='.
         // VCF often requires encoding of ';' as well.
-        if (byte < 32 || byte > 126 || byte === 61 || byte === 59) { // 61 is '=', 59 is ';'
+        if (byte < 32 || byte > 126 || byte === 61) { // 61 is '='
             encoded += '=' + ('0' + byte.toString(16).toUpperCase()).slice(-2);
         } else {
             encoded += String.fromCharCode(byte);
