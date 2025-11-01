@@ -6,10 +6,95 @@ import { filterContacts } from './filters.js';
  * Renders the entire application UI based on the current state.
  */
 export function render() {
-    console.log("Render-Funktion aufgerufen, zeichne Kontakte als Tabelle...");
-    renderHeader();
-    renderContactList();
-    updateContactCount();
+    console.log("Render-Funktion aufgerufen, Active View:", state.activeView);
+
+    // Update tab active state
+    updateTabActiveState();
+
+    // Switch between views
+    if (state.activeView === 'list') {
+        showListView();
+        renderHeader();
+        renderContactList();
+        updateContactCount();
+    } else if (state.activeView === 'stats') {
+        showStatsView();
+        renderStats();
+    }
+}
+
+/**
+ * Updates the active state of the main tabs
+ */
+function updateTabActiveState() {
+    const tabs = document.querySelectorAll('.main-tab');
+    tabs.forEach(tab => {
+        if (tab.dataset.view === state.activeView) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+}
+
+/**
+ * Shows the list view and hides the stats view
+ */
+function showListView() {
+    const listView = document.getElementById('list-view');
+    const statsView = document.getElementById('stats-view');
+    const toolbar = document.querySelector('.toolbar');
+
+    listView.classList.remove('hidden');
+    statsView.classList.add('hidden');
+    toolbar.classList.remove('hidden');
+}
+
+/**
+ * Shows the stats view and hides the list view
+ */
+function showStatsView() {
+    const listView = document.getElementById('list-view');
+    const statsView = document.getElementById('stats-view');
+    const toolbar = document.querySelector('.toolbar');
+
+    listView.classList.add('hidden');
+    statsView.classList.remove('hidden');
+    toolbar.classList.add('hidden');
+}
+
+/**
+ * Renders the statistics view with data quality metrics
+ * IMPORTANT: Only called when activeView === 'stats' (performance optimization)
+ */
+function renderStats() {
+    // Use state.contacts directly (unfiltered!) for accurate statistics
+    const contacts = state.contacts;
+    const total = contacts.length;
+
+    // Helper function to check if a field is empty (after trim)
+    const isEmpty = (value) => !value || value.trim() === '';
+
+    // Calculate statistics based on unfiltered contacts
+    const stats = {
+        total: total,
+        noCompany: contacts.filter(c => isEmpty(c.company)).length,
+        noTitle: contacts.filter(c => isEmpty(c.title)).length,
+        // "ohne E-Mail" means BOTH email AND workEmail are empty
+        noEmail: contacts.filter(c => isEmpty(c.email) && isEmpty(c.workEmail)).length,
+        // "ohne Adresse" means BOTH street AND workStreet are empty
+        noAddress: contacts.filter(c => isEmpty(c.street) && isEmpty(c.workStreet)).length,
+        // "ohne Mobilnummer" means BOTH mobile AND workMobile are empty
+        noMobile: contacts.filter(c => isEmpty(c.mobile) && isEmpty(c.workMobile)).length,
+    };
+
+    // Update DOM elements
+    document.getElementById('stat-total').textContent = stats.total;
+    document.getElementById('stat-no-company').textContent = stats.noCompany;
+    document.getElementById('stat-no-title').textContent = stats.noTitle;
+    document.getElementById('stat-no-email').textContent = stats.noEmail;
+    document.getElementById('stat-no-address').textContent = stats.noAddress;
+    document.getElementById('stat-no-mobile').textContent = stats.noMobile;
 }
 
 function updateContactCount() {

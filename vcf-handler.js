@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { showNotification } from './contacts.js';
 import { encodeQuotedPrintable, decodeQuotedPrintable } from './utils.js';
+import { findDuplicate } from './utils.js';
 
 /**
  * Exports given contacts array as a VCF file.
@@ -135,48 +136,6 @@ export function exportContactsToVCF(contacts, filename = 'contacts.vcf') {
 export function exportContacts() {
     exportContactsToVCF(state.contacts);
     showNotification('Kontakte exportiert.');
-}
-
-/**
- * Finds duplicate contacts based on name, email, or phone.
- * Returns the existing contact if found, null otherwise.
- */
-function findDuplicate(newContact, existingContacts) {
-    // Normalize strings for comparison
-    const normalize = (str) => (str || '').toLowerCase().trim();
-
-    const newFirstName = normalize(newContact.firstName);
-    const newLastName = normalize(newContact.lastName);
-    const newEmail = normalize(newContact.email);
-    const newWorkEmail = normalize(newContact.workEmail);
-    const newPhone = normalize(newContact.phone);
-    const newMobile = normalize(newContact.mobile);
-    const newWorkPhone = normalize(newContact.workPhone);
-
-    return existingContacts.find(existing => {
-        // Check name match (both first and last name must match)
-        const nameMatch =
-            newFirstName && newLastName &&
-            normalize(existing.firstName) === newFirstName &&
-            normalize(existing.lastName) === newLastName;
-
-        // Check email match (any email matches)
-        const emailMatch =
-            (newEmail && normalize(existing.email) === newEmail) ||
-            (newWorkEmail && normalize(existing.workEmail) === newWorkEmail) ||
-            (newEmail && normalize(existing.workEmail) === newEmail) ||
-            (newWorkEmail && normalize(existing.email) === newWorkEmail);
-
-        // Check phone match (any phone number matches)
-        const phoneMatch =
-            (newPhone && normalize(existing.phone) === newPhone) ||
-            (newMobile && normalize(existing.mobile) === newMobile) ||
-            (newWorkPhone && normalize(existing.workPhone) === newWorkPhone) ||
-            (newPhone && normalize(existing.mobile) === newPhone) ||
-            (newMobile && normalize(existing.phone) === newMobile);
-
-        return nameMatch || emailMatch || phoneMatch;
-    });
 }
 
 /**

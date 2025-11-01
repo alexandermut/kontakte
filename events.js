@@ -15,6 +15,7 @@ import {
 import { exportContacts, importVCF } from './vcf-handler.js';
 import { debounce } from './utils.js';
 import { persistSort } from './storage.js';
+import { closeMergeModal, confirmMerge, closeDuplicateDialog, handleDuplicateMerge, handleDuplicateCancel } from './merge.js';
 
 export function setupEventListeners() {
     console.log("Event Listeners werden eingerichtet...");
@@ -97,6 +98,35 @@ export function setupEventListeners() {
                 targetContent.classList.add('active');
             }
         });
+    });
+
+    // Duplicate Dialog
+    const duplicateDialog = document.getElementById('duplicate-dialog');
+    document.getElementById('duplicate-cancel-btn').addEventListener('click', handleDuplicateCancel);
+    document.getElementById('duplicate-merge-btn').addEventListener('click', handleDuplicateMerge);
+    duplicateDialog.addEventListener('click', (e) => {
+        if (e.target === duplicateDialog) closeDuplicateDialog();
+    });
+
+    // Merge Modal
+    const mergeModal = document.getElementById('merge-modal');
+    document.getElementById('merge-modal-close-btn').addEventListener('click', closeMergeModal);
+    document.getElementById('merge-cancel-btn').addEventListener('click', closeMergeModal);
+    document.getElementById('merge-confirm-btn').addEventListener('click', confirmMerge);
+    mergeModal.addEventListener('click', (e) => {
+        if (e.target === mergeModal) closeMergeModal();
+    });
+
+    // Main Tabs (View Switching)
+    const mainTabs = document.getElementById('main-tabs');
+    mainTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.main-tab');
+        if (!tab) return;
+
+        const view = tab.dataset.view;
+        if (view) {
+            state.activeView = view;
+        }
     });
 
     // Globale Tastatur-Shortcuts

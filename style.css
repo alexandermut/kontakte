@@ -954,3 +954,261 @@ body {
     scrollbar-width: thin;
     scrollbar-color: var(--border-color) var(--bg-secondary);
 }
+
+/* ===== Merge Modal ===== */
+.merge-info {
+    margin-bottom: 1.5rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.merge-fields-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.merge-field-row {
+    display: grid;
+    grid-template-columns: 150px 1fr 1fr;
+    gap: 1rem;
+    align-items: start;
+    padding: 1rem;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.merge-field-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    padding-top: 0.5rem;
+}
+
+.merge-field-option {
+    display: flex;
+    align-items: start;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background-color: var(--bg-primary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.merge-field-option:hover {
+    border-color: var(--color-primary);
+    background-color: var(--bg-tertiary);
+}
+
+.merge-field-option.selected {
+    border-color: var(--color-primary);
+    background-color: rgba(59, 130, 246, 0.1);
+}
+
+.merge-field-option input[type="radio"] {
+    margin-top: 0.25rem;
+    cursor: pointer;
+}
+
+.merge-field-content {
+    flex: 1;
+}
+
+.merge-field-source {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.merge-field-value {
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.merge-field-value.empty {
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+.merge-field-row.no-conflict {
+    opacity: 0.6;
+}
+
+.merge-field-row.no-conflict .merge-field-option {
+    cursor: default;
+    pointer-events: none;
+}
+
+/* ===== Main Tabs Navigation ===== */
+.main-tabs {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 var(--spacing-lg);
+    margin-top: var(--spacing-lg);
+    border-bottom: 2px solid var(--border-color);
+    background-color: var(--bg-primary);
+}
+
+.main-tab {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+
+.main-tab:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
+}
+
+.main-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+/* ===== Stats View ===== */
+.stats-view {
+    padding: var(--spacing-xl);
+    animation: fadeIn 0.3s ease;
+}
+
+.stats-view.hidden {
+    display: none;
+}
+
+.stats-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.stats-header h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 var(--spacing-sm) 0;
+}
+
+.stats-subtitle {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-lg);
+}
+
+.stat-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.stat-card.stat-total {
+    background: linear-gradient(135deg, var(--color-primary) 0%, #2563eb 100%);
+    color: white;
+    border: none;
+}
+
+.stat-card.stat-total .stat-icon {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.stat-card.stat-total .stat-label,
+.stat-card.stat-total .stat-value {
+    color: white;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-primary);
+    border-radius: var(--radius-md);
+    color: var(--color-primary);
+}
+
+.stat-icon svg {
+    width: 28px;
+    height: 28px;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xs);
+    font-weight: 500;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== Responsive Anpassungen für Stats ===== */
+@media (max-width: 768px) {
+    .stats-view {
+        padding: var(--spacing-md);
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-md);
+    }
+
+    .main-tabs {
+        padding: 0 var(--spacing-md);
+    }
+
+    .main-tab {
+        padding: 0.625rem 1rem;
+        font-size: 0.875rem;
+    }
+}

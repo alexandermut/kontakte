@@ -1,8 +1,9 @@
 import { state, dom } from './state.js';
 import { persistContacts } from './storage.js';
-import { isValidEmail, isValidGermanZip } from './utils.js';
+import { isValidEmail, isValidGermanZip, findDuplicate } from './utils.js';
 import { getVisualOrder } from './visual-order.js';
 import { renderSocialBadges, getSocialMediaDataFromBadges } from './social-media-badges.js';
+import { showDuplicateDialog } from './merge.js';
 
 /**
  * Shows a notification message to the user.
@@ -156,6 +157,27 @@ export function saveContact(e) {
         socialMedia: getSocialMediaDataFromBadges(),
     };
 
+    // Check for duplicates (exclude current contact if editing)
+    const duplicate = findDuplicate(contactData, state.contacts, id);
+    console.log('=== DUPLICATE CHECK ===');
+    console.log('Checking contactData:', contactData);
+    console.log('Current ID (editing):', id);
+    console.log('Duplicate found:', duplicate);
+
+    if (duplicate) {
+        console.log('Duplicate found, showing dialog');
+        // If editing existing contact, add the ID to contactData
+        if (id) {
+            contactData.id = parseInt(id);
+        }
+        const isNewContact = !id;
+
+        // Show custom duplicate dialog instead of confirm()
+        showDuplicateDialog(duplicate, contactData, isNewContact);
+        return; // Don't save yet, wait for user decision
+    }
+
+    // Normal save path (no duplicate detected)
     if (id) {
         // Bearbeiten
         const index = state.contacts.findIndex(c => c.id == id);

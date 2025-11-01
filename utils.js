@@ -7,6 +7,57 @@ export function escapeHTML(str) {
     });
 }
 
+/**
+ * Finds duplicate contacts based on name, email, or phone.
+ * Returns the existing contact if found, null otherwise.
+ * @param {Object} newContact - The contact to check for duplicates
+ * @param {Array} existingContacts - Array of existing contacts
+ * @param {number} excludeId - Optional ID to exclude from search (for editing)
+ * @returns {Object|null} - The duplicate contact or null
+ */
+export function findDuplicate(newContact, existingContacts, excludeId = null) {
+    // Normalize strings for comparison
+    const normalize = (str) => (str || '').toLowerCase().trim();
+
+    const newFirstName = normalize(newContact.firstName);
+    const newLastName = normalize(newContact.lastName);
+    const newEmail = normalize(newContact.email);
+    const newWorkEmail = normalize(newContact.workEmail);
+    const newPhone = normalize(newContact.phone);
+    const newMobile = normalize(newContact.mobile);
+    const newWorkPhone = normalize(newContact.workPhone);
+
+    return existingContacts.find(existing => {
+        // Exclude the contact being edited
+        if (excludeId && existing.id == excludeId) {
+            return false;
+        }
+
+        // Check name match (both first and last name must match)
+        const nameMatch =
+            newFirstName && newLastName &&
+            normalize(existing.firstName) === newFirstName &&
+            normalize(existing.lastName) === newLastName;
+
+        // Check email match (any email matches)
+        const emailMatch =
+            (newEmail && normalize(existing.email) === newEmail) ||
+            (newWorkEmail && normalize(existing.workEmail) === newWorkEmail) ||
+            (newEmail && normalize(existing.workEmail) === newEmail) ||
+            (newWorkEmail && normalize(existing.email) === newWorkEmail);
+
+        // Check phone match (any phone number matches)
+        const phoneMatch =
+            (newPhone && normalize(existing.phone) === newPhone) ||
+            (newMobile && normalize(existing.mobile) === newMobile) ||
+            (newWorkPhone && normalize(existing.workPhone) === newWorkPhone) ||
+            (newPhone && normalize(existing.mobile) === newPhone) ||
+            (newMobile && normalize(existing.phone) === newMobile);
+
+        return nameMatch || emailMatch || phoneMatch;
+    });
+}
+
 export function sortContacts(a, b) {
     const { by, order } = state.sort;
     const factor = order === 'asc' ? 1 : -1;

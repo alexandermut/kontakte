@@ -10,6 +10,7 @@ const rawState = {
     selectedContactIds: new Set(),
     lastSelectedId: null, // Für Shift-Klick
     nextId: 1,
+    activeView: 'list', // 'list' oder 'stats'
 };
 
 const handler = {
