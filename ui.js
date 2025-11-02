@@ -162,6 +162,14 @@ function renderContactList() {
         contactEl.className = `contact-item ${state.selectedContactIds.has(contact.id) ? 'selected' : ''}`;
         contactEl.dataset.id = contact.id;
 
+        // Scroll into view if this is the keyboard-selected contact (lastSelectedId)
+        if (contact.id === state.lastSelectedId) {
+            // Use setTimeout to ensure DOM is updated before scrolling
+            setTimeout(() => {
+                contactEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 0);
+        }
+
         const safeLastName = escapeHTML(contact.lastName);
         const safeFirstName = escapeHTML(contact.firstName);
         const safeCompany = escapeHTML(contact.company);

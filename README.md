@@ -4,18 +4,27 @@ Ein moderner Kontaktmanager mit VCF-Support, gebaut mit Vanilla JavaScript.
 
 ## Features
 
+### Kern-Funktionen
+- ✅ **Multi-Tab Detailansicht** - Bis zu 5 Kontakte gleichzeitig in separaten Tabs bearbeiten
 - ✅ **Kontaktverwaltung** - Erstellen, Bearbeiten, Löschen von Kontakten
-- ✅ **vCard 3.0 Support** - Import/Export von VCF-Dateien
+- ✅ **vCard 3.0 Support** - Import/Export von VCF-Dateien mit Mojibake-Auto-Repair
 - ✅ **Private & Geschäftliche Daten** - Getrennte Tabs für private und berufliche Informationen
 - ✅ **Social Media Profile** - Badge-System für 12 Social-Media-Plattformen
 - ✅ **Erweiterte Felder** - Nickname, URL, Notizen, Geburtstag, Kategorien
+
+### Produktivität
+- ✅ **Vollständige Tastatur-Steuerung** - Pfeil-Navigation, Enter zum Öffnen, Shortcuts für alle Aktionen
+- ✅ **Mehrfachauswahl** - Strg/Cmd-Klick, Shift-Klick für Bereichsauswahl
+- ✅ **Bulk-Aktionen** - Mehrfach-Löschen und Export
+- ✅ **Duplikatserkennung** - Automatische Erkennung und Zusammenführen von Duplikaten
 - ✅ **Favoriten** - Markiere wichtige Kontakte als Favoriten
 - ✅ **Suche & Filter** - Durchsuche alle Felder, filtere nach Kategorien
 - ✅ **Sortierung** - Sortiere nach Name, Firma, E-Mail, etc.
-- ✅ **Bulk-Aktionen** - Mehrfachauswahl und Export
+
+### Design & Datenschutz
 - ✅ **Dark/Light Theme** - Automatisches Theme-Switching
-- ✅ **LocalStorage** - Alle Daten bleiben lokal im Browser gespeichert
 - ✅ **Responsive Design** - Funktioniert auf Desktop und Mobile
+- ✅ **LocalStorage** - Alle Daten bleiben lokal im Browser gespeichert (100% offline)
 
 ## Installation
 
@@ -47,10 +56,25 @@ Dann öffne: http://localhost:8000
 - **Export**: Klicke auf "Exportieren" für alle Kontakte oder wähle spezifische Kontakte aus
 
 ### Tastaturkürzel
+
+**Globale Shortcuts:**
 - `Ctrl/Cmd + N` - Neuer Kontakt
 - `Ctrl/Cmd + F` - Suche fokussieren
 - `Ctrl/Cmd + E` - Kontakte exportieren
-- `Escape` - Modal schließen
+- `Escape` - Modal/Dialog/Tab schließen, Suche entfokussieren
+
+**Kontaktlisten-Navigation:**
+- `Pfeil Hoch/Runter` - Durch Kontaktliste navigieren (respektiert Filter/Sortierung)
+- `Enter` - Ausgewählten Kontakt öffnen
+- `Backspace` oder `Delete` - Ausgewählte Kontakte löschen
+- Automatisches Scrolling zum ausgewählten Kontakt
+
+**Formular-Bearbeitung:**
+- `Ctrl/Cmd + Enter` - Formular speichern (in Tab-Ansicht)
+
+**Mehrfachauswahl:**
+- `Strg/Cmd + Klick` - Einzelne Kontakte hinzufügen/entfernen
+- `Shift + Klick` - Bereichsauswahl (respektiert visuelle Reihenfolge)
 
 ## Technologie
 

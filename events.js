@@ -15,6 +15,7 @@ import { debounce } from './utils.js';
 import { persistSort } from './storage.js';
 import { closeMergeModal, confirmMerge, closeDuplicateDialog, handleDuplicateMerge, handleDuplicateCancel } from './merge.js';
 import { openTab, closeTab, switchToTab } from './tabs.js';
+import { getVisualOrder } from './visual-order.js';
 
 export function setupEventListeners() {
     console.log("Event Listeners werden eingerichtet...");
@@ -26,6 +27,8 @@ export function setupEventListeners() {
     // Suche mit Debouncing (250ms Verzögerung)
     const debouncedSearch = debounce((value) => {
         state.searchTerm = value;
+        // Reset keyboard navigation anchor when search changes
+        state.lastSelectedId = null;
     }, 250);
 
     dom.searchInput.addEventListener('input', (e) => {
@@ -35,6 +38,8 @@ export function setupEventListeners() {
     // Kategorie-Filter
     dom.categoryFilter.addEventListener('change', (e) => {
         state.categoryFilter = e.target.value;
+        // Reset keyboard navigation anchor when filter changes
+        state.lastSelectedId = null;
     });
 
     // Sortierung durch Klick auf Spaltenüberschriften
@@ -48,6 +53,9 @@ export function setupEventListeners() {
         } else {
             state.sort = { by: sortKey, order: 'asc' };
         }
+
+        // Reset keyboard navigation anchor when sort changes
+        state.lastSelectedId = null;
 
         // Sortierung persistieren
         persistSort();
@@ -178,27 +186,113 @@ export function setupEventListeners() {
         // FIX EDGE #3: Don't trigger shortcuts when user is typing in input/textarea
         const isTyping = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
 
-        // Escape zum Schließen des aktiven Tabs (works even when typing)
-        if (e.key === 'Escape' && state.activeView === 'tab' && state.activeTabId) {
-            closeTab(state.activeTabId);
+        // ===== ESC Key - Multiple contexts (Priority order) =====
+        if (e.key === 'Escape') {
+            // 1. Close Merge Modal (highest priority)
+            const mergeModal = document.getElementById('merge-modal');
+            if (mergeModal && !mergeModal.classList.contains('hidden')) {
+                closeMergeModal();
+                return;
+            }
+
+            // 2. Close Duplicate Dialog
+            const duplicateDialog = document.getElementById('duplicate-dialog');
+            if (duplicateDialog && !duplicateDialog.classList.contains('hidden')) {
+                closeDuplicateDialog();
+                return;
+            }
+
+            // 3. Close active tab
+            if (state.activeView === 'tab' && state.activeTabId) {
+                closeTab(state.activeTabId);
+                return;
+            }
+
+            // 4. Blur search input (if focused)
+            if (document.activeElement === dom.searchInput) {
+                dom.searchInput.blur();
+                return;
+            }
+        }
+
+        // ===== Arrow Keys - List Navigation =====
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && state.activeView === 'list' && !isTyping) {
+            e.preventDefault(); // Prevent page scroll
+
+            const visualOrder = getVisualOrder();
+            if (visualOrder.length === 0) return; // Empty list
+
+            // Find current index (based on lastSelectedId anchor)
+            let currentIndex = visualOrder.findIndex(c => c.id === state.lastSelectedId);
+            if (currentIndex === -1) {
+                // No anchor set, start at beginning/end
+                currentIndex = e.key === 'ArrowDown' ? -1 : 0;
+            }
+
+            // Calculate new index
+            const newIndex = e.key === 'ArrowDown'
+                ? Math.min(currentIndex + 1, visualOrder.length - 1)
+                : Math.max(currentIndex - 1, 0);
+
+            // Update selection (replace current selection with single new contact)
+            const newContact = visualOrder[newIndex];
+            state.selectedContactIds.clear();
+            state.selectedContactIds.add(newContact.id);
+            state.lastSelectedId = newContact.id;
+
+            // Trigger re-render (will scroll into view via ui.js)
+            state.contacts = [...state.contacts];
             return;
         }
 
-        // Strg/Cmd + N für neuen Kontakt (not when typing)
+        // ===== Enter - Open Contact =====
+        if (e.key === 'Enter' && state.activeView === 'list' && !isTyping && state.lastSelectedId) {
+            e.preventDefault();
+            const contact = state.contacts.find(c => c.id === state.lastSelectedId);
+            if (contact) {
+                openTab(contact);
+            }
+            return;
+        }
+
+        // ===== Backspace/Delete - Delete Selected Contacts =====
+        if ((e.key === 'Backspace' || e.key === 'Delete') && state.activeView === 'list' && !isTyping) {
+            // CRITICAL: Don't trigger if user is in search input (even though isTyping is false after blur)
+            if (e.target === dom.searchInput) return;
+
+            e.preventDefault();
+            if (state.selectedContactIds.size > 0) {
+                deleteSelectedContacts();
+            }
+            return;
+        }
+
+        // ===== Ctrl/Cmd + Enter - Save Form in Active Tab =====
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && state.activeView === 'tab') {
+            e.preventDefault();
+            const form = document.querySelector(`form[data-tab-id="${state.activeTabId}"]`);
+            if (form) {
+                // Use requestSubmit() to trigger validation and submit event
+                form.requestSubmit();
+            }
+            return;
+        }
+
+        // ===== Ctrl/Cmd + N - New Contact =====
         if ((e.ctrlKey || e.metaKey) && e.key === 'n' && state.activeView !== 'tab' && !isTyping) {
             e.preventDefault();
             openTab(null);
             return;
         }
 
-        // Strg/Cmd + F für Suche fokussieren (not when typing in other fields)
+        // ===== Ctrl/Cmd + F - Focus Search =====
         if ((e.ctrlKey || e.metaKey) && e.key === 'f' && !isTyping) {
             e.preventDefault();
             dom.searchInput.focus();
             return;
         }
 
-        // Strg/Cmd + E für Export (not when typing)
+        // ===== Ctrl/Cmd + E - Export =====
         if ((e.ctrlKey || e.metaKey) && e.key === 'e' && state.activeView !== 'tab' && !isTyping) {
             e.preventDefault();
             exportContacts();

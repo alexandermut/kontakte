@@ -8,426 +8,312 @@ Das Ziel ist ein schneller, moderner und benutzerfreundlicher client-seitiger Ko
 
 ---
 
-## 2. Aktuelle Probleme & Bugs
+## 2. Aktuelle Probleme & Bekannte Einschränkungen
 
-*   **Klick-Verzögerung:** Die Unterscheidung zwischen Einzel- und Doppelklick wird aktuell mit einem `setTimeout` gelöst. Dies führt zu einer leichten Verzögerung bei der Auswahl von Kontakten. Dies könnte durch eine robustere Event-Handling-Logik verbessert werden.
-*   **VCF-Kompatibilität:** Der VCF-Parser ist rudimentär und unterstützt möglicherweise nicht alle Dialekte und Felder des VCF-Standards (z.B. mehrere Telefonnummern, komplexe Adressen).
-*   **Performance bei >1000 Kontakten:** Das Rendern der gesamten Liste könnte bei sehr vielen Kontakten langsam werden. Hier könnte "Virtual Scrolling" eine zukünftige Lösung sein.
+### 🐛 Bekannte Bugs (Keine kritischen Bugs!)
+*   **Klick-Verzögerung (150ms):** Die Unterscheidung zwischen Einzel- und Doppelklick wird mit einem `setTimeout` gelöst. Dies führt zu einer leichten Verzögerung bei der Auswahl von Kontakten. Mögliche Lösung: Click-Counter statt Timeout.
 
----
+### ⚠️ Limitierungen
+*   **VCF-Felder:** Der VCF-Parser unterstützt noch nicht alle VCF 3.0 Felder:
+    - ✅ Unterstützt: FN, N, EMAIL, TEL, ADR, ORG, TITLE, ROLE, URL, BDAY, CATEGORIES, NOTE, VERSION, PHOTO (Base64)
+    - ❌ Noch nicht: GEO, TZ, SOUND, ANNIVERSARY, RELATED, mehrere Telefonnummern/E-Mails als Arrays
+*   **Performance bei >1000 Kontakten:** Vollständiges Re-Rendering der Liste wird bei sehr vielen Kontakten langsam. Aktuell getestet bis 500 Kontakte ohne Probleme. Lösung: Virtual Scrolling (siehe Sektion 5).
+*   **Mobile UX:** Die App ist responsive, aber nicht für Touch optimiert (keine Swipe-Gesten, Button-Größe für Maus optimiert).
+*   **Browser-Storage-Limit:** LocalStorage hat ein Limit von ~5-10 MB je nach Browser. Bei >5000 Kontakten könnte dies erreicht werden. Mögliche Lösung: IndexedDB oder Backend-Sync.
 
-## 3. Kurzfristige Ziele (Nächste Schritte)
+### 🔧 Technische Schulden (Refactoring-Bedarf)
+*   **Click-Delay-System:** `setTimeout`-basierte Unterscheidung zwischen Single/Double-Click sollte durch Event-Counter ersetzt werden.
+*   **Sortierung nicht vollständig persistiert:** Die Funktion `persistSort()` ist implementiert, aber nicht überall aufgerufen (siehe [storage.js:18-23](storage.js#L18-L23)).
+*   **Code-Duplikation:** Formular-Validierung (E-Mail, PLZ) sollte in zentrale Validation-Utility ausgelagert werden.
+*   **Fehlende Tests:** Keine Unit-Tests vorhanden. Besonders kritisch: VCF-Parser, Duplikatserkennung, Merge-Logik.
+*   **Magic Numbers:** Einige Werte sind hard-coded (z.B. Tab-Limit: 5, Debounce: 250ms). Sollten in Konstanten ausgelagert werden.
 
-### 🚧 IN ARBEIT: Multi-Tab Kontakt-Detailansicht (Ersetzt Modal-System)
+### ⚡ Performance-Skalierung (für 25.000+ Kontakte)
 
-**Status**: Teilweise implementiert (ca. 60% fertig)
+**Ziel:** App soll 25.000+ Kontakte flüssig verwalten können
 
-**Architektur-Entscheidungen:**
-- ✅ Zweite Tab-Leiste unterhalb der Hauptnavigation (Kontaktliste | Auswertung)
-- ✅ **Ein Formular pro Tab** (max. 5 gleichzeitige Tabs)
-- ✅ Tabs bleiben offen beim Wechsel zu Liste/Auswertung
-- ✅ Auto-Close nach erfolgreichem Speichern
-- ✅ Gleicher Kontakt nur 1× öffnen (zu existierendem Tab wechseln)
-- ✅ Immer im Edit-Mode (kein Read-Only View im MVP)
+**Strategie:** Hybrid-Architektur mit Rust/WebAssembly für CPU-intensive Operationen
 
-**Bereits implementiert:**
-- ✅ State erweitert (`openTabs`, `activeTabId`, `nextTabId`) - [state.js](state.js:5-17)
-- ✅ Tab-Management-Modul ([tabs.js](tabs.js)) mit:
-  - `openTab(contact)` - Öffnet Tab oder wechselt zu existierendem
-  - `closeTab(tabId)` - Schließt Tab und wechselt zu anderem/Liste
-  - `closeTabsByContactId(contactId)` - Schließt alle Tabs eines Kontakts (für Löschen)
-  - `switchToTab(tabId)` - Wechselt zu einem Tab
-  - `getActiveTab()` / `getActiveTabContact()` - Helper-Funktionen
-- ✅ HTML-Struktur vorbereitet:
-  - Modal komplett entfernt
-  - `#contact-tabs` Container für Tab-Leiste eingefügt
-  - `#tab-container` für Formular-Rendering eingefügt
-- ✅ Formular-Template-Funktion ([contact-form-template.js](contact-form-template.js))
-  - Generiert komplettes Formular-HTML mit eindeutigen IDs pro Tab
-  - Alle Felder haben Tab-spezifische IDs (z.B. `contact-firstName-tab-1`)
+**Phase 1: Grundlagen (Voraussetzungen)**
+1. **Virtual Scrolling** - Nur 20-30 sichtbare Zeilen rendern (JS)
+   - Intersection Observer API
+   - Smooth Scrolling trotz 25k+ Kontakte
+   - Geschätzte Implementierung: 2-3 Stunden
 
-**Verbleibende Implementierung:**
+2. **IndexedDB Migration** - LocalStorage-Limit umgehen
+   - Migration von localStorage → IndexedDB
+   - Async Storage-API
+   - Keine 10 MB Grenze mehr
+   - Geschätzte Implementierung: 3-4 Stunden
 
-#### 1. **ui.js - Tab-Rendering** (~200 Zeilen) 🔴 KRITISCH
-```javascript
-// Zu implementieren:
-- renderContactTabs() {
-    // Rendert die zweite Tab-Leiste mit allen offenen Tabs
-    // Zeigt Tab-Titel und Close-Button (×)
-    // Markiert aktiven Tab
-}
+3. **Web Worker Infrastruktur** - UI-Blocking vermeiden
+   - Schwere Operationen in Background-Thread
+   - Message-Passing-Interface
+   - Geschätzte Implementierung: 2 Stunden
 
-- renderTabContainers() {
-    // Erstellt/Aktualisiert Formulare für alle Tabs
-    // Verwendet getContactFormTemplate(tabId) für HTML
-    // Füllt Formulare mit Kontaktdaten via fillTabForm()
-}
+**Phase 2: Rust/WASM Core-Module**
+4. **WASM Build-Pipeline** - Entwicklungsumgebung
+   - `wasm-pack` Setup
+   - Cargo.toml konfigurieren
+   - JS/WASM Bridge erstellen
+   - Bundle-Size-Optimierung
+   - Geschätzte Implementierung: 4-6 Stunden
 
-- fillTabForm(tabId, contact) {
-    // Befüllt alle Formularfelder für einen Tab
-    // WICHTIG: Muss ALLE Felder aus openModal() Logik übernehmen
-    // Felder: firstName, lastName, email, phone, company, etc. (~22 Felder)
-    // Social Media Badges rendern
-    // Löschen-Button ein/ausblenden (nur bei existierenden Kontakten)
-}
+5. **Duplikat-Detector (Rust)** - Kritischster Bottleneck
+   - Parallele Duplikat-Suche mit Rayon
+   - Levenshtein Distance
+   - Jaro-Winkler für Tippfehler
+   - Soundex/Metaphone für phonetische Ähnlichkeit
+   - **Performance:** 25k Kontakte in <1s (aktuell: ~45s in JS)
+   - Geschätzte Implementierung: 8-10 Stunden
 
-- render() erweitern:
-    // Fall: state.activeView === 'tab'
-    //   → Zeige #contact-tabs und #tab-container
-    //   → Verstecke list-view und stats-view
-    //   → Rufe renderContactTabs() und renderTabContainers() auf
-```
+6. **Fuzzy Search Engine (Rust)** - Inverted Index
+   - Tantivy Volltext-Suchindex
+   - Typo-Toleranz (~2 Buchstaben)
+   - Multi-Field Search (Name, E-Mail, Firma, Notizen)
+   - **Performance:** Suche in 25k in <10ms (aktuell: ~800ms in JS)
+   - Geschätzte Implementierung: 10-12 Stunden
 
-**Dateipfad**: [ui.js](ui.js:8-98)
-**Referenz für Formular-Befüllung**: [contacts.js:23-67](contacts.js:23-67) (openModal-Funktion)
+7. **High-Performance Sorting (Rust)** - Radix Sort
+   - Radix Sort für große Datensätze
+   - Multi-Key Sorting
+   - **Performance:** 25k Kontakte in ~12ms (aktuell: ~150ms in JS)
+   - Geschätzte Implementierung: 4-5 Stunden
 
----
+8. **VCF Parser (Rust)** - Schneller Import
+   - Paralleles Parsing großer VCF-Dateien
+   - Streaming-Parser für >10 MB Dateien
+   - **Performance:** 5000-Kontakt-VCF in ~180ms (aktuell: ~2s in JS)
+   - Geschätzte Implementierung: 6-8 Stunden
 
-#### 2. **contacts.js - Refactoring** (~100 Zeilen) 🔴 KRITISCH
-```javascript
-// Zu löschen:
-- openModal() {  // Zeilen 22-70 → KOMPLETT LÖSCHEN
-- closeModal() { // Zeilen 75-78 → KOMPLETT LÖSCHEN
+**Phase 3: Optimierungen**
+9. **Memory Pool** - Weniger Garbage Collection
+   - Objekt-Recycling für Kontakt-Rendering
+   - Weniger Memory-Churn
 
-// Zu ändern:
-- saveContact(e) { // Zeilen 83+
-    // PROBLEM: Aktuell nutzt es DOM-Elemente ohne Tab-ID (z.B. dom.contactFirstNameInput)
-    // LÖSUNG: Muss Tab-ID ermitteln und Felder mit Tab-Suffix abrufen
+10. **Lazy Loading** - On-Demand Daten laden
+    - Social-Media-Badges on demand
+    - Avatar-Bilder lazy loaden
 
-    // NEU:
-    const tabId = e.target.closest('form').dataset.tabId; // Aus Formular holen
-    const id = document.getElementById(`contact-id-${tabId}`).value;
-    const firstName = document.getElementById(`contact-firstName-${tabId}`).value.trim();
-    // ... alle ~22 Felder mit ${tabId} Suffix
+**Geschätzter Gesamtaufwand:** ~50-60 Stunden (1-2 Wochen Vollzeit)
 
-    // Nach erfolgreichem Speichern:
-    import { closeTab } from './tabs.js';
-    closeTab(tabId); // Schließt Tab automatisch
-    state.activeView = 'list'; // Wechselt zurück zur Liste
-}
+**Technologie-Stack:**
+- **Rust:** `wasm-bindgen`, `serde`, `rayon`, `tantivy`, `strsim`
+- **Build:** `wasm-pack`, `cargo`
+- **JS Integration:** Web Workers, SharedArrayBuffer (optional)
 
-- deleteContact(contactId) {
-    // NEU: Prüfen ob Kontakt in einem Tab offen ist
-    import { closeTabsByContactId } from './tabs.js';
-    closeTabsByContactId(contactId); // Schließt alle Tabs dieses Kontakts
-    // ... rest der Löschlogik
-}
-```
-
-**Dateipfad**: [contacts.js](contacts.js:1-200)
-**Referenz für alle Formularfelder**: Siehe openModal() Zeilen 28-56
+**Bundle-Size-Impact:**
+- WASM Runtime: ~100 KB (gzipped)
+- Core Module: ~200-300 KB (gzipped)
+- Gesamt: +400 KB (akzeptabel für die Performance-Gewinne)
 
 ---
 
-#### 3. **events.js - Event-Handler umschreiben** (~80 Zeilen) 🟡 MITTEL
-```javascript
-// Zu ändern:
+## 3. Kurzfristige Ziele (Hohe Priorität - Quick Wins)
 
-// A) Edit-Button (Zeile ~164):
-//    VORHER: openModal(contact)
-//    NACHHER:
-import { openTab } from './tabs.js';
-openTab(contact);
+### 🔥 Produktivität & UX
+1. **Undo/Redo-Funktion** - Versehentliche Änderungen rückgängig machen (Ctrl+Z / Ctrl+Y)
+   - History-Stack für letzte 20 Aktionen (Löschen, Bearbeiten, Merge)
+   - Visual Feedback in Toolbar ("Rückgängig: Kontakt gelöscht")
 
-// B) Doppelklick (Zeile ~227):
-//    VORHER: openModal(contact)
-//    NACHHER: openTab(contact)
+2. **Batch-Edit für Kategorien** - Mehrere Kontakte gleichzeitig kategorisieren
+   - Auswahl → Neue Aktion "Kategorie ändern" in Toolbar
+   - Dropdown mit Kategorien → Bulk-Update
 
-// C) "Neuer Kontakt" Button (Zeile 58):
-//    VORHER: openModal()
-//    NACHHER: openTab(null)
+3. **Geburtstags-Widget** - Anstehende Geburtstage in den nächsten 30 Tagen
+   - Badge in Toolbar mit Counter (z.B. "🎂 3")
+   - Klick öffnet Dropdown mit Liste
+   - Direkt zu Kontakt springen möglich
 
-// NEU: Event-Listener für Kontakt-Tabs hinzufügen
-const contactTabsNav = document.getElementById('contact-tabs');
-contactTabsNav.addEventListener('click', (e) => {
-    // Tab-Wechsel (Klick auf Tab-Button)
-    const tabButton = e.target.closest('.contact-tab');
-    if (tabButton && !e.target.closest('.tab-close-btn')) {
-        const tabId = tabButton.dataset.tabId;
-        switchToTab(tabId);
-        return;
-    }
+4. **Erweiterte Filter** - Zusätzliche schnelle Filter im Dropdown
+   - "Ohne Kategorie" (Kontakte ohne Zuordnung finden)
+   - "Unvollständige Kontakte" (ohne E-Mail oder Telefon)
+   - "Ohne Geburtstag" (fehlende Geburtsdaten)
 
-    // Tab-Schließen (Klick auf X-Button)
-    const closeBtn = e.target.closest('.tab-close-btn');
-    if (closeBtn) {
-        const tabId = closeBtn.dataset.tabId;
-        closeTab(tabId);
-    }
-});
+5. **Kontakt-Avatar-System** - Profilbilder mit Initialen-Fallback
+   - Foto-Upload via Click oder Drag & Drop
+   - Auto-generierte Initialen-Avatare in 8 Farben (Hash-basiert)
+   - Anzeige in Liste (30px) und Tab (80px)
 
-// NEU: Formular-Tab-Switcher anpassen (Zeilen 82-101)
-// PROBLEM: Aktueller Code nutzt globale .form-tab Selector
-// LÖSUNG: Muss Tab-spezifisch sein via data-form="${tabId}" Attribut
+### 📊 Export & Daten
+6. **CSV Export** - Alternative zu VCF für Excel/Google Sheets
+   - Alle Kontakte oder Auswahl exportieren
+   - UTF-8 BOM für Excel-Kompatibilität
+   - Spalten-Mapping: Vorname, Nachname, E-Mail, Telefon, etc.
 
-formTabs.forEach(tab => {
-    tab.addEventListener('click', (e) => {
-        const targetTab = tab.dataset.tab;
-        const formId = tab.dataset.form; // NEU: Tab-ID ermitteln
+7. **Drag & Drop VCF Import** - Dateien direkt ins Fenster ziehen
+   - Visual Feedback beim Hover (gestrichelte Border)
+   - Mehrere VCF-Dateien gleichzeitig verarbeiten
+   - Progress-Indicator bei großen Importen
 
-        // Nur Tabs DIESES Formulars ändern
-        const formTabs = document.querySelectorAll(`.form-tab[data-form="${formId}"]`);
-        const formContents = document.querySelectorAll(`[data-tab-content][data-form="${formId}"]`);
+8. **Print-View** - Druckbare Kontaktliste generieren
+   - Clean Layout ohne UI-Elemente
+   - Sortierung & Filter respektieren
+   - Optional: Mit/Ohne Adressen
 
-        formTabs.forEach(t => t.classList.remove('active'));
-        formContents.forEach(c => c.classList.remove('active'));
+### 🔍 Suche & Navigation
+9. **Erweiterte Suche** - Suche auf spezifische Felder einschränken
+   - Dropdown neben Suchfeld: "Alle Felder", "Name", "E-Mail", "Firma", "Notizen"
+   - URL-Parameter für Deep-Links (z.B. ?search=Max&field=name)
 
-        tab.classList.add('active');
-        const targetContent = document.querySelector(
-            `[data-tab-content="${targetTab}"][data-form="${formId}"]`
-        );
-        targetContent.classList.add('active');
-    });
-});
-
-// NEU: Formular Submit-Handler
-// WICHTIG: Jedes Tab-Formular braucht eigenen Submit-Listener
-// Wird in renderTabContainers() via addEventListener hinzugefügt
-```
-
-**Dateipfad**: [events.js](events.js:1-229)
+10. **Spalten anpassen** - Spaltenbreite per Drag ändern
+    - Resize-Handle zwischen Spalten
+    - Breite im localStorage persistieren
+    - Reset-Button für Standard-Breiten
 
 ---
 
-#### 4. **CSS für Tab-System** (~150 Zeilen) 🟡 MITTEL
-```css
-/* Zu erstellen in style.css */
+## 4. Mittelfristige Ziele (UX-Verbesserungen)
 
-/* ===== Kontakt-Tabs (zweite Ebene) ===== */
-.contact-tabs {
-    display: flex;
-    gap: 0.25rem;
-    padding: 0 var(--spacing-lg);
-    background-color: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    overflow-x: auto; /* Für viele Tabs */
-}
+### 🎨 Tabellen-Customization
+- **Spalten ein-/ausblenden** - Benutzerdefinierte Tabellenansicht
+  - Checkboxen in Toolbar: Welche Spalten anzeigen?
+  - Mindestens: Name, E-Mail, Telefon immer sichtbar
+  - Preferences im localStorage speichern
 
-.contact-tabs.hidden {
-    display: none;
-}
+- **Spalten-Reihenfolge per Drag & Drop** - Flexible Anordnung
+  - Spalten-Header sind draggable
+  - Visual Feedback beim Drag (Ghost-Element)
+  - Reihenfolge persistieren
 
-.contact-tab {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s ease;
-    border-top: 2px solid transparent;
-}
+- **Spalten-Sortierung persistieren** - Sortierung merken
+  - Aktuelle Sortierung im localStorage speichern
+  - Beim nächsten App-Start wiederherstellen
+  - Bereits teilweise implementiert, muss aktiviert werden
 
-.contact-tab:hover {
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-}
+### 🔍 Duplikat-Management
+- **Duplikat-Scanner** - Alle Duplikate auf einmal finden
+  - Neue Ansicht "Duplikate prüfen" im Hauptmenü
+  - Liste aller potenziellen Duplikate mit Konfidenz-Score
+  - Massenaktionen: "Alle zusammenführen" oder einzeln wählen
+  - Fuzzy-Matching für Tippfehler (z.B. "Max" vs "Maxx")
 
-.contact-tab.active {
-    background-color: var(--bg-primary);
-    color: var(--color-primary);
-    border-top-color: var(--color-primary);
-}
+### 📋 Kontakt-Organisation
+- **Kontakt-Tags** - Flexible Mehrfach-Kategorisierung
+  - Zusätzlich zu festen Kategorien
+  - Freie Texteingabe für Tags (z.B. "Kunde", "Partner", "VIP")
+  - Mehrere Tags pro Kontakt möglich
+  - Tag-Filter in Toolbar (Multi-Select)
 
-.tab-close-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 3px;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    opacity: 0.6;
-    transition: all 0.2s;
-}
+- **Benutzerdefinierte Kategorien** - Eigene Kategorien erstellen
+  - Settings-Dialog für Kategorien-Verwaltung
+  - Hinzufügen, Umbenennen, Löschen, Farben zuweisen
+  - Migration bestehender Kontakte bei Kategorie-Änderung
 
-.tab-close-btn:hover {
-    opacity: 1;
-    background-color: var(--color-danger);
-    color: white;
-}
+- **Trash/Papierkorb** - Sicherheitsnetz für gelöschte Kontakte
+  - Gelöschte Kontakte 30 Tage im Papierkorb behalten
+  - Wiederherstellen-Funktion
+  - Endgültiges Löschen nach Ablauf oder manuell
+  - Badge zeigt Anzahl der gelöschten Kontakte
 
-/* ===== Tab-Container (hält Formulare) ===== */
-.tab-container {
-    padding: var(--spacing-xl);
-    overflow-y: auto;
-    max-height: calc(100vh - 200px); /* Anpassen je nach Layout */
-}
+### 💾 Daten-Management
+- **Kontakt-Templates** - Vorlagen für häufige Kontakttypen
+  - "Privatkontakt", "Geschäftskontakt", "Lieferant", etc.
+  - Vorbefüllte Felder beim Erstellen
+  - User kann eigene Templates erstellen
 
-.tab-container.hidden {
-    display: none;
-}
+- **JSON Export/Import** - Vollständiger Datenexport
+  - Alle Felder inklusive Metadaten
+  - Backup-Funktion (Download als .json)
+  - Wiederherstellung aus JSON
 
-.contact-form {
-    max-width: 900px;
-    margin: 0 auto;
-}
+- **Kontakt-History** - Änderungen nachvollziehen
+  - "Letzte Änderung"-Timestamp für jeden Kontakt
+  - Anzeige in Tab: "Erstellt am: ... / Geändert am: ..."
+  - Optional: Vollständiger Change-Log pro Kontakt
 
-.contact-form.hidden {
-    display: none;
-}
+### 🖱️ Interaktion
+- **Rechtsklick-Kontextmenü** - Schnellaktionen per Rechtsklick
+  - "Öffnen", "Bearbeiten", "Löschen", "Favorit", "Exportieren"
+  - Auch für Mehrfachauswahl (z.B. "5 Kontakte löschen")
 
-/* Form-Footer (ersetzt modal-footer) */
-.form-footer {
-    display: flex;
-    gap: var(--spacing-sm);
-    padding-top: var(--spacing-lg);
-    border-top: 1px solid var(--border-color);
-    margin-top: var(--spacing-lg);
-}
-
-/* Responsive: Schmale Bildschirme */
-@media (max-width: 768px) {
-    .contact-tabs {
-        padding: 0 var(--spacing-sm);
-    }
-
-    .contact-tab {
-        padding: 0.375rem 0.75rem;
-        font-size: 0.8125rem;
-    }
-
-    .tab-container {
-        padding: var(--spacing-md);
-    }
-}
-```
-
-**Dateipfad**: [style.css](style.css) (am Ende einfügen, nach Zeile 1214)
+- **Notiz-Vollbildmodus** - Größeres Textfeld für lange Notizen
+  - Fullscreen-Button im Notizen-Feld
+  - Markdown-Support (fett, kursiv, Listen)
+  - Live-Preview während der Eingabe
 
 ---
 
-#### 5. **merge.js - Anpassung** (~10 Zeilen) 🟢 EINFACH
-```javascript
-// Zeile 75-76:
-// VORHER:
-closeContactModal(); // Close the contact edit modal
-openMergeModal(duplicate, newContactData, isNewContact);
+## 5. Langfristige Ziele (Advanced Features)
 
-// NACHHER:
-import { getActiveTab, closeTab } from './tabs.js';
-const activeTab = getActiveTab();
-if (activeTab) {
-    closeTab(activeTab.id); // Schließt aktuell offenen Tab
-}
-state.activeView = 'list'; // Wechselt zur Liste
-openMergeModal(duplicate, newContactData, isNewContact);
-```
+### 🔄 Synchronisierung & Cloud
+- **Backend-Synchronisierung** - Multi-Device Support
+  - CardDAV-Server-Integration (Nextcloud, iCloud, Google)
+  - Conflict Resolution bei gleichzeitigen Änderungen
+  - Offline-First mit Sync-Queue
+  - End-to-End Verschlüsselung optional
 
-**Dateipfad**: [merge.js:75-76](merge.js:75-76)
+- **Progressive Web App (PWA)** - Installierbare App
+  - Service Worker für Offline-Fähigkeit
+  - Desktop & Mobile Installation
+  - App-Icons und Splash-Screens
+  - Push-Notifications für Geburtstage (opt-in)
 
----
+### 📱 Mobile & Performance
+- **Virtual Scrolling** - Performance bei >1000 Kontakten
+  - Nur sichtbare Zeilen rendern
+  - Smooth Scrolling auch bei 10.000+ Kontakten
+  - Intersection Observer API nutzen
 
-#### 6. **Social Media Badges - Anpassung** (~20 Zeilen) 🟢 EINFACH
-```javascript
-// social-media-badges.js
-// Funktion renderSocialBadges() anpassen
+- **Mobile-Optimierung** - Native App Feeling
+  - Swipe-Gesten (Links: Löschen, Rechts: Favorit)
+  - Touch-optimierte UI (größere Buttons)
+  - Bottom-Navigation für Tabs
 
-// VORHER:
-export function renderSocialBadges(socialMedia = []) {
-    const container = document.getElementById('social-media-badges');
-    // ...
-}
+### 🔧 Erweiterte Datenfelder
+- **Mehrere Telefonnummern** - Array-basierte Felder
+  - Dynamisch Telefonnummern hinzufügen/entfernen
+  - Typen: Mobil, Privat, Geschäft, Fax, etc.
+  - Primär-Nummer markieren
 
-// NACHHER:
-export function renderSocialBadges(socialMedia = [], tabId = '') {
-    const containerId = tabId ? `social-media-badges-${tabId}` : 'social-media-badges';
-    const container = document.getElementById(containerId);
-    // ... rest bleibt gleich
-}
+- **Mehrere E-Mail-Adressen** - Flexible E-Mail-Verwaltung
+  - Dynamisch E-Mails hinzufügen/entfernen
+  - Typen: Privat, Geschäft, Sonstige
+  - Primär-Adresse markieren
 
-// Alle Aufrufe von renderSocialBadges() müssen tabId übergeben:
-// contacts.js: renderSocialBadges(contact.socialMedia || [], tabId)
-```
+- **Benutzerdefinierte Felder** - Vollständig anpassbar
+  - User kann eigene Felder definieren (Text, Zahl, Datum, URL)
+  - Feldtypen mit Validierung
+  - Felder pro Kontakt oder global
 
-**Dateipfad**: [social-media-badges.js](social-media-badges.js)
+### 🌐 Kollaboration & Integration
+- **Kontakt-Beziehungen** - Netzwerk-Grafik
+  - Beziehungen zwischen Kontakten (Partner, Chef, Kollege, Familie)
+  - Graph-Visualisierung der Beziehungen
+  - "Gemeinsame Kontakte" finden
 
----
+- **Gruppen & Mailinglisten** - Team-Management
+  - Kontakte zu Gruppen zusammenfassen
+  - E-Mail an ganze Gruppe (mailto: mit BCC)
+  - Gruppen-Export für Newsletter-Tools
 
-#### 7. **Testing-Checkliste** 🧪
+- **QR-Code Generator** - Schnelles Teilen
+  - VCard als QR-Code generieren
+  - Scannen mit Smartphone → direkter Import
+  - Anzeige im Tab und zum Download
 
-Nach Implementierung testen:
+### 🎯 Analytics & Insights
+- **Erweiterte Statistiken** - Daten-Insights
+  - Kontakte nach Herkunft (Import-Quelle)
+  - Wachstum über Zeit (Graph)
+  - Geburtstags-Verteilung (Heatmap)
+  - Vollständigkeits-Score pro Kontakt
 
-**Basis-Funktionalität:**
-- [ ] Klick auf "Neuer Kontakt" → Tab öffnet sich mit leerem Formular
-- [ ] Klick auf Kontakt in Liste → Tab öffnet sich mit Daten
-- [ ] Doppelklick auf Kontakt → Tab öffnet sich
-- [ ] Tab-Titel zeigt Kontaktnamen korrekt
-- [ ] Wechsel zwischen Tabs funktioniert
-- [ ] X-Button schließt Tab
+- **Aktivitäts-Dashboard** - Was passiert in der App?
+  - "Heute hinzugefügt: 3"
+  - "Diese Woche bearbeitet: 8"
+  - "Ungenutzte Kontakte (>365 Tage nicht geöffnet)"
 
-**Tab-Limit:**
-- [ ] Max 5 Tabs öffnen → 6. Tab zeigt Fehlermeldung
+### 🔐 Sicherheit & Datenschutz
+- **Verschlüsselung** - Sensitive Daten schützen
+  - Optional: localStorage verschlüsseln (Master-Passwort)
+  - Notizen als verschlüsselt markieren
+  - Auto-Lock nach Inaktivität
 
-**Gleicher Kontakt:**
-- [ ] Kontakt "Max M." öffnen → Tab 1 öffnet sich
-- [ ] Nochmal "Max M." öffnen → wechselt zu Tab 1 (kein neuer Tab)
-
-**Speichern & Schließen:**
-- [ ] Kontakt bearbeiten & Speichern → Tab schließt automatisch
-- [ ] Änderungen in Kontaktliste sichtbar
-
-**Löschen:**
-- [ ] Kontakt in Tab öffnen, Löschen-Button klicken → Tab schließt, Kontakt weg
-
-**Navigation:**
-- [ ] Tab offen, wechseln zu "Auswertung" → Tab bleibt offen
-- [ ] Zurück zu "Kontaktliste" → Tab immer noch offen
-- [ ] Tab aktivieren → Formular erscheint
-
-**Formular-Tabs:**
-- [ ] Zwischen "Allgemein", "Privat", "Beruflich" wechseln → funktioniert in jedem Tab unabhängig
-
-**Mehrere Tabs:**
-- [ ] Tab 1: Max Mustermann, Tab 2: Erika Müller
-- [ ] In Tab 1 Name ändern, zu Tab 2 wechseln
-- [ ] Zurück zu Tab 1 → Änderungen noch da (nicht gespeichert)
-- [ ] Tab 1 Speichern → schließt, Änderungen persistent
-
-**Edge-Cases:**
-- [ ] Kontakt in Tab offen, über Liste löschen → Tab schließt automatisch
-- [ ] Alle Tabs schließen → Zurück zu Liste
-- [ ] Tab öffnen, Abbrechen → Tab schließt
-
-**Duplicate Detection:**
-- [ ] In Tab Kontakt erstellen, Duplikat → Dialog erscheint
-- [ ] Zusammenführen → Merge-Dialog, danach zurück zur Liste
-
----
-
-### Weitere kurzfristige Ziele
-
-- **Kontakt-Avatars:** Implementierung von Foto/Avatar-Unterstützung mit Fallback auf Initialen-Avatars in verschiedenen Farben.
-- **Geburtstags-Erinnerungen:** Anzeige bevorstehender Geburtstage (z.B. in den nächsten 7 Tagen) in der Toolbar oder als Badge.
-- **Duplikatsprüfung verbessern:** Eine erweiterte Prüfung beim Speichern und Importieren, um Duplikate zuverlässiger zu erkennen (aktuell nur Name-basiert).
-- **Kontaktfelder-Erweiterung:** Unterstützung für mehrere Telefonnummern, E-Mail-Adressen und Notizen.
-
----
-
-## 4. Mittelfristige Ziele (Feature-Backlog)
-
-- **Spalten per Drag & Drop verschieben:** Dem Benutzer erlauben, die Reihenfolge der Spalten in der Tabellenansicht nach seinen Wünschen anzupassen und zu speichern.
-- **Duplikate zusammenführen:** Eine dedizierte Funktion, um Duplikate in der Liste zu finden und dem Benutzer eine Oberfläche zum Zusammenführen (Merging) anzubieten.
-- **Erweiterte Filter-Optionen:** Zusätzliche Filtermöglichkeiten für "Kontakte ohne E-Mail", "Kontakte ohne Telefonnummer", "Geburtstage diesen Monat" etc.
-- **Druckansicht:** Eine saubere, für den Druck optimierte Ansicht der Kontaktliste.
-- **Kontakt-Detailansicht:** Statt eines Modals könnte ein Klick auf einen Kontakt eine dedizierte Detailansicht (z.B. in einer Seitenleiste) öffnen.
-- **Benutzerdefinierte Kategorien:** Dem Benutzer erlauben, eigene Kategorien zu erstellen, zu bearbeiten und zu löschen.
-
----
-
-## 5. Langfristige Ideen (Vision)
-
-- **Backend-Synchronisierung:** Anbindung an einen echten Server oder eine API (z.B. CardDAV, Google Contacts API), um Kontakte über Geräte hinweg zu synchronisieren.
-- **Progressive Web App (PWA):** Die Anwendung installierbar machen, um sie wie eine native App zu nutzen und Offline-Fähigkeiten zu verbessern.
-- **Benutzerdefinierte Felder:** Dem Benutzer erlauben, eigene Felder zu Kontakten hinzuzufügen (z.B. Social Media Profile, Hobbies).
-- **Kontakthistorie:** Protokollierung von Änderungen an Kontakten mit Undo/Redo-Funktionalität.
-- **Export in andere Formate:** CSV, JSON, oder Excel-Export zusätzlich zu VCF.
+- **Export mit Passwort** - Geschützte Backups
+  - VCF/JSON Export mit Passwortschutz
+  - AES-256 Verschlüsselung
+  - Import mit Passwort-Eingabe
 
 ---
 
@@ -457,13 +343,30 @@ Nach Implementierung testen:
 - ✅ Kategorisierung von Kontakten.
 - ✅ Geburtsdatum-Feld mit automatischer Altersberechnung.
 - ✅ Formular-Validierung (E-Mail, deutsche PLZ).
-- ✅ Duplikats-Erkennung beim Import (Name-basiert).
+- ✅ Duplikats-Erkennung mit verbesserter Logik (Name-basiert, unterstützt fehlende Vornamen).
+- ✅ Merge-Funktion zum Zusammenführen von Duplikaten.
+
+### Multi-Tab Kontakt-Detailansicht
+- ✅ Tab-basierte Kontakt-Bearbeitung (ersetzt Modal-System).
+- ✅ Bis zu 5 gleichzeitige Tabs mit je eigenem Formular.
+- ✅ Tab-Persistenz beim Wechsel zwischen Hauptansichten (Liste/Auswertung).
+- ✅ Auto-Close nach erfolgreichem Speichern.
+- ✅ Deduplizierung: Gleicher Kontakt nur einmal öffnen.
+- ✅ Tab-Management: Öffnen, Schließen, Wechseln zwischen Tabs.
+- ✅ Ghost-Tab-Prevention: Tabs schließen automatisch bei Kontakt-Löschung.
+- ✅ Tab-spezifische Formulare mit eindeutigen IDs pro Tab.
+- ✅ Social Media Badges pro Tab mit Tab-ID-Unterstützung.
 
 ### Import/Export
 - ✅ VCF-Import mit Quoted-Printable-Dekodierung für Sonderzeichen.
 - ✅ VCF-Export der gesamten Kontaktliste.
 - ✅ VCF-Export nur ausgewählter Kontakte (Bulk-Export).
 - ✅ Unterstützung für CATEGORIES und BDAY in VCF 3.0.
+- ✅ Automatische Mojibake-Reparatur (UTF-8 → MacRoman/Windows-1252 Korruption).
+- ✅ Line Unfolding nach RFC 2426 (mehrzeilige VCF-Felder).
+- ✅ Charset-Detection (UTF-8 und ISO-8859-1).
+- ✅ Korrekte Escape/Unescape-Logik für Sonderzeichen (Backslash, Komma, Semikolon).
+- ✅ Unterstützung für TYPE-Parameter (TYPE=WORK und ;WORK Syntax).
 
 ### Mehrfachauswahl & Bulk-Aktionen
 - ✅ Mehrfachauswahl mit `Strg/Cmd` + Klick (einzelne Kontakte hinzufügen/entfernen).
@@ -474,6 +377,17 @@ Nach Implementierung testen:
 ### UI/UX
 - ✅ Dark/Light-Theme mit persistenter Speicherung.
 - ✅ Responsives Design für verschiedene Bildschirmgrößen.
-- ✅ Tastatur-Shortcuts (`Strg/Cmd + N` für neuen Kontakt, `Strg/Cmd + F` für Suche, `Strg/Cmd + E` für Export, `Esc` zum Schließen).
 - ✅ Doppelklick zum Öffnen eines Kontakts.
 - ✅ Visuelles Feedback bei Auswahl und Hover-Effekte.
+
+### Tastatur-Shortcuts
+- ✅ `Strg/Cmd + N` - Neuer Kontakt
+- ✅ `Strg/Cmd + F` - Suche fokussieren
+- ✅ `Strg/Cmd + E` - Kontakte exportieren
+- ✅ `Esc` - Modal/Dialog/Tab schließen, Suche entfokussieren
+- ✅ `Pfeil Runter/Hoch` - Navigation durch Kontaktliste (respektiert Filter/Sortierung)
+- ✅ `Enter` - Ausgewählten Kontakt öffnen
+- ✅ `Backspace/Delete` - Ausgewählte Kontakte löschen
+- ✅ `Strg/Cmd + Enter` - Formular speichern (in Tab-Ansicht)
+- ✅ Automatisches Scrolling zu ausgewähltem Kontakt
+- ✅ `isTyping`-Check: Shortcuts werden in Input/Textarea-Feldern deaktiviert
