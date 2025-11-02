@@ -159,6 +159,30 @@ Fünf fundamentale Architektur-Fehler wurden basierend auf ChatGPT + Gemini Audi
 
 ---
 
+#### 📋 Definition of Ready - ERSTELLT
+
+**Status:** ✅ Dokumentiert (2025-11-02, Commit: 076b830)
+
+**Datei:** [DEFINITION_OF_READY.md](DEFINITION_OF_READY.md)
+
+Umfassende DoR basierend auf ChatGPT's hochkarätigen Audit:
+
+**8 Kernbereiche:**
+1. Architektur & Plattform (Capability-Probe, Support-Matrix, Threading)
+2. Sicherheit, Privacy & Policies (COOP/COEP, CSP, Permissions)
+3. Storage & Datenmodell (Dexie v2 Migration, Quota, Export/Import)
+4. Suche & Dedupe (Blocking-Key, Cache, Qualitätsmetriken)
+5. Kryptografie (WebCrypto-Helper, AES-GCM, PBKDF2)
+6. UI/UX & A11y (Progress, Cancel, Virtual Scroller, i18n)
+7. Performance & Benchmarks (Budgets, Repro-Tests, Size Guards)
+8. Delivery & DX (Build-Script, CI/CD, Lizenzprüfung)
+
+**Akzeptanzkriterien:** Must-Have, Should-Have, Nice-to-Have definiert
+
+**Nächster Schritt:** Checkboxen abhaken während Implementierung
+
+---
+
 #### 🔄 Phase 1: JavaScript Foundation (Tag 1-2)
 
 **Status:** 🔴 Nicht begonnen
