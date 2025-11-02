@@ -159,6 +159,24 @@ Fünf fundamentale Architektur-Fehler wurden basierend auf ChatGPT + Gemini Audi
 
 ---
 
+#### 🌐 Hosting-Entscheidung - DOKUMENTIERT
+
+**Status:** ✅ Entschieden (2025-11-02, Commit: TBD)
+
+**Datei:** [HOSTING_DECISION.md](HOSTING_DECISION.md)
+
+**Entscheidung:** GitHub Pages + Single-Thread WASM
+
+**Begründung:**
+- ✅ GitHub Pages hat keine COOP/COEP Headers → kein `crossOriginIsolated`
+- ✅ Blocking-Algorithmus ist auch single-threaded ausreichend schnell (<100ms)
+- ✅ Multi-Threading würde nur ~50ms bringen (marginal bei 450x Speedup durch Blocking)
+- ✅ Migration zu Vercel/Netlify später trivial (wenn Multi-Threading gewünscht)
+
+**Konsequenz:** `rayon` bleibt im Code (optional feature), wird aber nicht genutzt
+
+---
+
 #### 📋 Definition of Ready - ERSTELLT
 
 **Status:** ✅ Dokumentiert (2025-11-02, Commit: 076b830)
