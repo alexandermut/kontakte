@@ -373,32 +373,164 @@ export const wasm = new WasmBridge();
 
 ---
 
-##### 1.3 LocalStorage bleibt (KEINE IndexedDB Migration)
-**Entscheidung:** Gemini hat recht - bei schnellem WASM ist localStorage ausreichend
+##### 1.3 IndexedDB Migration (KRITISCH - Gemini's Korrektur!)
+**⚠️ WICHTIG:** Ursprünglicher Plan (localStorage behalten) war **falsch**!
 
-**Begründung:**
-- localStorage-Limit: ~5-10 MB
-- 25.000 Kontakte mit allen Feldern: ~8 MB als JSON
-- **Mit WASM-Kompression:** Kann <3 MB werden
-- Einfacher als IndexedDB (keine Async-Migration nötig)
-- Falls Limit erreicht: Warnung + Export-Empfehlung
+**Gemini's kritische Erkenntnisse:**
+1. **localStorage ist SYNCHRON** → 8MB JSON blockiert UI für Hunderte Millisekunden
+2. **localStorage ist NICHT aus Web Workern erreichbar** → WASM im Worker kann nicht auf Daten zugreifen
+3. **Daten-Kopie Main Thread → Worker = Performance-Killer** → 8MB bei jedem Aufruf kopieren
 
-**Monitoring hinzufügen:**
+**✅ Richtige Lösung: IndexedDB**
+- Asynchron → blockiert UI nie
+- Aus Web Workern zugänglich → WASM kann direkt lesen/schreiben
+- Keine Größenlimits (außer Disk-Space)
+- Indizes für schnelle Queries
+
+**Implementierung mit Dexie.js (schlanke IndexedDB-Lib):**
+
 ```javascript
-// storage.js - erweitern
-export function checkStorageUsage() {
-    const used = new Blob([localStorage.getItem('contacts') || '']).size;
-    const limit = 5 * 1024 * 1024; // 5 MB (konservativ)
-    const percentage = (used / limit) * 100;
+// storage.js (KOMPLETT NEU)
+import Dexie from 'dexie';
 
-    if (percentage > 80) {
-        console.warn(`LocalStorage: ${percentage.toFixed(1)}% voll (${used} Bytes)`);
-        // Optional: User-Warning in UI anzeigen
-    }
+export const db = new Dexie('KontakteDB');
 
-    return { used, limit, percentage };
+db.version(1).stores({
+    // ++id = Auto-Increment Primary Key
+    // Weitere Felder = Indizes für schnelle Suche
+    contacts: '++id, lastName, firstName, email, company, mobile, category, isFavorite',
+
+    // Meta-Daten (sortOrder, nextId, etc.)
+    meta: 'key'
+});
+
+// === API (ersetzt localStorage-Funktionen) ===
+
+export async function loadContacts() {
+    const contacts = await db.contacts.toArray();
+    return contacts;
+}
+
+export async function persistContacts(contacts) {
+    // Bulk-Update (viel schneller als einzeln)
+    await db.contacts.clear();
+    await db.contacts.bulkAdd(contacts);
+}
+
+export async function addContact(contact) {
+    const id = await db.contacts.add(contact);
+    return id;
+}
+
+export async function updateContact(id, changes) {
+    await db.contacts.update(id, changes);
+}
+
+export async function deleteContact(id) {
+    await db.contacts.delete(id);
+}
+
+// Indizierte Queries (SEHR schnell)
+export async function getContactsByCategory(category) {
+    return await db.contacts.where('category').equals(category).toArray();
+}
+
+export async function getFavorites() {
+    return await db.contacts.where('isFavorite').equals(1).toArray();
+}
+
+export async function searchByName(query) {
+    // Nutzt lastName-Index
+    return await db.contacts
+        .where('lastName')
+        .startsWithIgnoreCase(query)
+        .toArray();
+}
+
+// Meta-Daten
+export async function getSortOrder() {
+    const meta = await db.meta.get('sortOrder');
+    return meta ? meta.value : { by: 'lastName', order: 'asc' };
+}
+
+export async function setSortOrder(sortOrder) {
+    await db.meta.put({ key: 'sortOrder', value: sortOrder });
 }
 ```
+
+**Migration von localStorage → IndexedDB:**
+
+```javascript
+// migration.js (Einmalig beim ersten App-Start)
+export async function migrateFromLocalStorage() {
+    // Prüfen ob Migration nötig
+    const hasMigrated = await db.meta.get('migrated');
+    if (hasMigrated) return;
+
+    console.log('Migrating from localStorage to IndexedDB...');
+
+    try {
+        // Alte Daten aus localStorage lesen
+        const oldContacts = JSON.parse(localStorage.getItem('contacts') || '[]');
+        const oldSort = JSON.parse(localStorage.getItem('sortOrder') || '{"by":"lastName","order":"asc"}');
+
+        if (oldContacts.length > 0) {
+            // In IndexedDB schreiben
+            await db.contacts.bulkAdd(oldContacts);
+            await db.meta.put({ key: 'sortOrder', value: oldSort });
+
+            console.log(`✅ ${oldContacts.length} Kontakte migriert`);
+
+            // localStorage aufräumen (optional)
+            // localStorage.removeItem('contacts');
+            // localStorage.removeItem('sortOrder');
+        }
+
+        // Migration als abgeschlossen markieren
+        await db.meta.put({ key: 'migrated', value: true });
+
+    } catch (error) {
+        console.error('Migration failed:', error);
+        throw error;
+    }
+}
+```
+
+**Integration in main.js:**
+
+```javascript
+// main.js - App-Start
+import { db, loadContacts } from './storage.js';
+import { migrateFromLocalStorage } from './migration.js';
+
+async function init() {
+    // 1. IndexedDB öffnen
+    await db.open();
+
+    // 2. Einmalige Migration von localStorage
+    await migrateFromLocalStorage();
+
+    // 3. Kontakte laden (async!)
+    const contacts = await loadContacts();
+    state.contacts = contacts;
+
+    // 4. Rest der App starten
+    render();
+    initEvents();
+}
+
+init();
+```
+
+**Aufwand:** 4-6 Stunden (inkl. Migration & Testing)
+
+**Testing:**
+- [ ] IndexedDB wird korrekt erstellt
+- [ ] Migration von localStorage funktioniert
+- [ ] Alle CRUD-Operationen funktionieren
+- [ ] Indizierte Queries sind schnell (<10ms)
+- [ ] Web Worker kann auf IndexedDB zugreifen
+- [ ] Keine UI-Blockierung bei großen Datensätzen
 
 ---
 

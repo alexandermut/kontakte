@@ -7,6 +7,219 @@
 
 ---
 
+## 🏗️ State-of-the-Art 3-Schichten-Architektur
+
+**Basierend auf Gemini's Analyse - Die einzige Architektur für 25k+ Kontakte ohne Backend**
+
+### Architektur-Übersicht
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     BROWSER (Client-Only)                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Schicht 1: UI Layer (Main Thread)                   │  │
+│  │  ─────────────────────────────────────               │  │
+│  │  Job: NUR "Malen" (DOM) + Events empfangen           │  │
+│  │  Tech: ui.js, events.js, virtual-scroller.js         │  │
+│  │  Regel: NIEMALS rechnen, nur Befehle senden          │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                          ↓ postMessage                      │
+│                          ↑ results                          │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Schicht 2: Logic Layer (Web Worker Thread)          │  │
+│  │  ────────────────────────────────────────             │  │
+│  │  Job: "Denken" - Parsen, Suchen, Duplikate           │  │
+│  │  Tech: wasm-worker.js + Rust/WASM                    │  │
+│  │  Regel: NIEMALS UI blockieren                        │  │
+│  │                                                        │  │
+│  │  ┌────────────────────────────────────────┐          │  │
+│  │  │  WASM Modules (Rust)                   │          │  │
+│  │  │  ├─ VCF Parser                         │          │  │
+│  │  │  ├─ Duplicate Detector (Rayon)         │          │  │
+│  │  │  ├─ Fuzzy Search (fuzzy-matcher)       │          │  │
+│  │  │  └─ Crypto (Argon2, AES-GCM)           │          │  │
+│  │  └────────────────────────────────────────┘          │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                          ↓ IndexedDB API                    │
+│                          ↑ Query Results                    │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Schicht 3: Storage Layer (IndexedDB)                │  │
+│  │  ──────────────────────────────────                  │  │
+│  │  Job: 25k+ Kontakte performant speichern             │  │
+│  │  Tech: Dexie.js (IndexedDB Wrapper)                  │  │
+│  │  Regel: Async, aus Worker zugänglich                 │  │
+│  │                                                        │  │
+│  │  DB: KontakteDB                                       │  │
+│  │  ├─ contacts (++id, lastName, email, ...)            │  │
+│  │  └─ meta (sortOrder, settings, ...)                  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Warum diese Architektur?
+
+**Problem 1: localStorage ist synchron**
+```javascript
+// ❌ FALSCH - Blockiert UI für 300ms+
+const contacts = JSON.parse(localStorage.getItem('contacts')); // 8MB = 300ms
+state.contacts = contacts;
+render(); // UI hängt während Parse
+```
+
+```javascript
+// ✅ RICHTIG - IndexedDB ist async
+const contacts = await db.contacts.toArray(); // 0ms UI-Block
+state.contacts = contacts;
+render(); // UI bleibt responsive
+```
+
+**Problem 2: Web Worker kann nicht auf localStorage zugreifen**
+```javascript
+// ❌ FALSCH - Worker hat kein localStorage
+// wasm-worker.js
+const contacts = localStorage.getItem('contacts'); // undefined!
+```
+
+```javascript
+// ✅ RICHTIG - Worker kann IndexedDB nutzen
+// wasm-worker.js
+import { db } from './storage.js';
+const contacts = await db.contacts.toArray(); // Funktioniert!
+```
+
+**Problem 3: Daten-Kopie Main → Worker = Langsam**
+```javascript
+// ❌ FALSCH - 8MB bei jedem Aufruf kopieren
+worker.postMessage({
+    type: 'FIND_DUPLICATES',
+    contacts: state.contacts // 8MB Kopie!
+});
+```
+
+```javascript
+// ✅ RICHTIG - Worker liest direkt aus DB
+worker.postMessage({ type: 'FIND_DUPLICATES' }); // Nur Befehl
+// Worker macht intern:
+const contacts = await db.contacts.toArray(); // Kein Kopieren
+```
+
+---
+
+## 🚀 Workflows mit 3-Schichten-Architektur
+
+### Workflow 1: VCF-Import (25.000 Kontakte)
+
+```
+User droppt VCF
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ UI Thread (Main)                                      │
+│ ────────────────                                      │
+│ 1. FileReader.readAsText(file)                       │
+│ 2. worker.postMessage({ type: 'PARSE_VCF', text })   │
+│ 3. Zeige Spinner                                      │
+└──────────────────────────────────────────────────────┘
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ Worker Thread                                         │
+│ ─────────────                                         │
+│ 1. WASM: parse_vcf(text) → 25k Kontakte (180ms)     │
+│ 2. IndexedDB: await db.contacts.bulkAdd(contacts)    │
+│ 3. postMessage({ type: 'PARSE_COMPLETE' })           │
+└──────────────────────────────────────────────────────┘
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ UI Thread (Main)                                      │
+│ ────────────────                                      │
+│ 1. Entferne Spinner                                   │
+│ 2. Lade Kontakte: await db.contacts.toArray()        │
+│ 3. Virtual Scroller rendert 30 Zeilen                │
+└──────────────────────────────────────────────────────┘
+```
+
+**Ergebnis:** 25k Kontakte importiert, **UI nie blockiert**, Gesamtzeit <2s
+
+---
+
+### Workflow 2: Fuzzy Search (User tippt "Müll")
+
+```
+User tippt "M"
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ UI Thread (Main)                                      │
+│ ────────────────                                      │
+│ 1. oninput Event                                      │
+│ 2. worker.postMessage({ type: 'SEARCH', query: 'M' })│
+│ 3. UI bleibt interaktiv (User kann weitertippen)     │
+└──────────────────────────────────────────────────────┘
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ Worker Thread                                         │
+│ ─────────────                                         │
+│ 1. IndexedDB: contacts = await db.contacts.toArray() │
+│ 2. WASM: fuzzy_search('M', contacts) → Top 50 (<10ms)│
+│ 3. postMessage({ type: 'RESULTS', ids: [1,5,7...] }) │
+└──────────────────────────────────────────────────────┘
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ UI Thread (Main)                                      │
+│ ────────────────                                      │
+│ 1. state.visibleContactIds = results.ids              │
+│ 2. Virtual Scroller rendert 50 Ergebnisse            │
+└──────────────────────────────────────────────────────┘
+```
+
+User tippt weiter: "ü"
+      ↓ (Vorheriger Worker-Task wird gecancelt)
+
+Neuer Worker-Task: Suche "Mü"
+      ↓
+Ergebnis: Top 20 (z.B. "Müller", "Mülheim", ...)
+
+**Ergebnis:** <50ms pro Tastendruck, **nie UI-Block**, User kann flüssig tippen
+
+---
+
+### Workflow 3: Duplikat-Scan (25k Kontakte)
+
+```
+User klickt "Duplikate finden"
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ UI Thread (Main)                                      │
+│ ────────────────                                      │
+│ 1. worker.postMessage({ type: 'FIND_DUPLICATES' })   │
+│ 2. Zeige Progress-Bar                                │
+│ 3. User kann weiterarbeiten (Tab wechseln, etc.)     │
+└──────────────────────────────────────────────────────┘
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ Worker Thread                                         │
+│ ─────────────                                         │
+│ 1. IndexedDB: contacts = await db.contacts.toArray() │
+│ 2. WASM: find_duplicates(contacts, 0.85)             │
+│    - Rayon: Parallele Verarbeitung auf 8 Cores       │
+│    - Levenshtein, Jaro-Winkler, Soundex              │
+│    - 312 Mio. Vergleiche in <1s                      │
+│ 3. postMessage({ type: 'DUPLICATES', pairs: [...] }) │
+└──────────────────────────────────────────────────────┘
+      ↓
+┌──────────────────────────────────────────────────────┐
+│ UI Thread (Main)                                      │
+│ ────────────────                                      │
+│ 1. Zeige Duplikat-Liste (z.B. 50 Paare gefunden)     │
+│ 2. User kann Duplikate einzeln reviewen & mergen     │
+└──────────────────────────────────────────────────────┘
+```
+
+**Ergebnis:** 25k Kontakte in <1s gescannt, **UI bleibt responsive**
+
+---
+
 ## Duplikat-Detector (Rust) - Detaillierte Implementierung
 
 ### Performance-Ziel
@@ -421,14 +634,21 @@ async function scanForDuplicates() {
 - **Ziel (Rust):** <10ms pro Tastendruck
 - **Speedup:** 80x schneller
 
-### Ansatz: Inverted Index mit Tantivy
+### ⚠️ Ansatz-Änderung: fuzzy-matcher statt Tantivy
 
-Tantivy ist eine Volltext-Suchbibliothek (ähnlich wie Elasticsearch) in Rust.
+**Gemini's Empfehlung:** `fuzzy-matcher` statt `tantivy`
+
+**Grund:**
+- `tantivy` ist RIESIG (~2 MB WASM nach gzip)
+- `fuzzy-matcher` ist winzig (~50 KB WASM)
+- Für 25k Kontakte reicht fuzzy-matcher völlig
+- Tantivy lohnt sich erst bei >100k Dokumenten
 
 ```toml
 # Cargo.toml - Dependency hinzufügen
 [dependencies]
-tantivy = "0.21"
+fuzzy-matcher = "0.3"  # Leichtgewichtig!
+# tantivy = "0.21"     # NUR wenn >100k Kontakte
 ```
 
 ### Implementierung
