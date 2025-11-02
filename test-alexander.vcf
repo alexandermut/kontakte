@@ -1,0 +1,14 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Mut;Alexander;;;
+FN:Alexander Mut
+ORG:abcfinance advise GmbH
+TITLE:Finanzierung, Leasing, Mietkauf
+TEL;TYPE=WORK:00491715528187
+TEL;TYPE=HOME:004915151002767
+EMAIL;TYPE=INTERNET,WORK:Alexander.Mut@abcfinance.de
+EMAIL;TYPE=INTERNET,HOME:mutalex@gmail.com
+URL:https://alexandermut.de
+NOTE:Weitere URL: https://vcardabc.alexandermut.de
+ADR;TYPE=WORK;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:;;Kamekestra=C3=9Fe 2-8;K=C3=B6ln;;50672;Deutschland
+END:VCARD

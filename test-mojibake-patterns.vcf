@@ -1,0 +1,12 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Test;Mojibake;;;
+FN:Mojibake Test
+NOTE:Test verschiedene Corruption-Muster:
+NOTE:1. √ü = ß (stra√üe → straße)
+NOTE:2. √∂ = ö (k√∂ln → köln)
+NOTE:3. √§ = ä (g√§rten → gärten)
+NOTE:4. √º = ü (m√ºnchen → münchen)
+ADR;TYPE=HOME:;;Butzweilerstra√üe 35-39;K√∂ln;;50829;Deutschland
+EMAIL;TYPE=HOME:test@example.com
+END:VCARD

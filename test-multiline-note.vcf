@@ -1,0 +1,10 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Müller;Max;;;
+FN:Max Müller
+NOTE:Dies ist eine Notiz
+ die über mehrere Zeilen
+ geht und korrekt
+ importiert werden sollte.
+EMAIL;TYPE=INTERNET,HOME:max@example.com
+END:VCARD

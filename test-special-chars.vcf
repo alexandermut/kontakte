@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Schmidt\\Jones;Max\, Jr.;;;
+FN:Max\, Jr. Schmidt\\Jones
+NOTE:Diese Notiz enthält\, Kommas\; Semikolons und \\ Backslashes.
+EMAIL;TYPE=INTERNET,HOME:max.jr@example.com
+END:VCARD

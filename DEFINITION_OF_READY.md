@@ -337,27 +337,43 @@ export function validateImport(data: any): { valid: boolean; errors: string[] } 
 
 ## 4) Suche & Dedupe (Fachlogik)
 
-### Blocking-Schlüssel festgelegt
+### Blocking-Schlüssel festgelegt - VARIANTE A (FINAL) ✅
+
+**Entscheidung:** Variante A - Name-Phonetik + E-Mail-User + Telefon-Tail (ohne PLZ)
 
 **Finaler Blocking-Key:**
 ```
-soundex(lastName) + "_" + emailUser.slice(0,3) + "_" + phoneDigits.slice(-4)
+soundex(lastName) + "-" + prefix(emailUser, 3) + "-" + suffix(phoneDigits, 4)
 ```
 
+**Begründung:**
+- ✅ Beste Balance aus Recall/Präzision ohne PLZ-Abhängigkeit
+- ✅ Sprach-/Länderunabhängig (keine Postleitzahl nötig)
+- ✅ Robuste Felder: Nachname fast immer vorhanden, E-Mail ODER Telefon oft vorhanden
+- ✅ Stabil bei gemischter Datenqualität (Consumer-Adressbücher)
+
 **Beispiele:**
-- "Müller" + "max@test.de" + "+49 123 456789" → `M460_max_6789`
-- "Mueller" + "max.mueller@test.de" + "0123456789" → `M460_max_6789` (gleich!)
-- "Schmidt" + "anna@test.de" + "0987654321" → `S530_ann_4321` (anders)
+- "Müller" + "max@test.de" + "0123456789" → `M460-max-6789`
+- "Mueller" + "max@test.de" + "0123456789" → `M460-max-6789` (✓ gleich!)
+- "Schmidt" + "anna@firma.de" + "9876543210" → `S530-ann-3210`
+- "Müller" + (keine Mail) + "0123456789" → `M460----6789`
+- "Schmidt" + "info@test.de" + (kein Tel) → `S530-inf-0000`
 
 **Fallbacks:**
-- Kein E-Mail: `"---"` statt `emailUser`
-- Kein Telefon: `"0000"` statt `phoneDigits`
+- Kein E-Mail: `"---"` (3 Zeichen)
+- Kein Telefon: `"0000"` (4 Zeichen)
 - Kein Nachname: `"0000"` als soundex
 
+**Alternative Modi (optional, Feature-Flag):**
+- **Variante B** (B2B/CRM): `soundex + PLZ[:3] + phone[-4]` (für verlässliche PLZ)
+- **Variante C** (High-Recall): Doppel-Buckets `soundex+email` UND `soundex+phone`
+
 **Checklist:**
+- [x] Variante A als Default gewählt (ChatGPT + Gemini Empfehlung)
 - [ ] Blocking-Key-Generierung in Rust implementiert
+- [ ] Dexie-Normalisierung mit `emailUser`, `phoneDigits`, `soundex`
 - [ ] Unit-Tests für Kantenfälle (Umlaute, fehlende Felder)
-- [ ] Dokumentation mit Beispielen
+- [ ] Dokumentation in allen Dateien vereinheitlicht
 
 ### Search-Cache-Design
 

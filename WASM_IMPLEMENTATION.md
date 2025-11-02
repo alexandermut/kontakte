@@ -264,10 +264,10 @@ User klickt "Duplikate finden"
 │                                                        │
 │    SCHRITT A - BLOCKING (O(n), 1x Iteration):        │
 │    ├─ Erstelle Buckets (HashMap):                    │
-│    │  Key = soundex(lastName) + first3(postalCode)   │
-│    │  "Müller, 10115" → Bucket "M460_101"            │
-│    │  "Mueller, 10117" → Bucket "M460_101" (gleich!) │
-│    │  "Schmidt, 10115" → Bucket "S530_101" (anders)  │
+│    │  Key = soundex(lastName)-emailUser[:3]-phone[-4]│
+│    │  "Müller, max@test.de, 456789" → "M460-max-6789"│
+│    │  "Mueller, max@t.de, 0456789" → "M460-max-6789" │
+│    │  "Schmidt, anna@t.de, 654321" → "S530-ann-4321" │
 │    └─ Ergebnis: 100 Buckets mit Ø 250 Kontakten      │
 │                                                        │
 │    SCHRITT B - FUZZY-MATCH (nur innerhalb Buckets):  │
@@ -559,7 +559,7 @@ pub struct Contact {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub mobile: Option<String>,
-    pub postal_code: Option<String>, // Für Blocking-Algorithmus
+    // Hinweis: postal_code nicht nötig für Variante A
 }
 
 #[derive(Serialize)]
@@ -590,20 +590,36 @@ impl DuplicateDetector {
         use std::collections::HashMap;
 
         // SCHRITT A: BLOCKING (O(n) - Eine Iteration)
-        // Erstelle Buckets basierend auf Soundex + PLZ
+        // VARIANTE A: soundex(lastName) + emailUser[:3] + phoneDigits[-4]
         let mut buckets: HashMap<String, Vec<&Contact>> = HashMap::new();
 
         for contact in &self.contacts {
-            // Blocking-Key: soundex(lastName) + erste 3 Ziffern der PLZ
+            // VARIANTE A: soundex(lastName) + emailUser[:3] + phoneDigits[-4]
             let soundex_code = soundex(&contact.last_name);
 
-            // PLZ extrahieren (falls vorhanden, sonst "000")
-            let postal_code = contact.postal_code
+            // E-Mail User-Teil extrahieren (3 Zeichen)
+            let email_user = contact.email
                 .as_deref()
-                .and_then(|pc| pc.chars().take(3).collect::<String>().parse::<String>().ok())
-                .unwrap_or_else(|| "000".to_string());
+                .and_then(|e| e.split('@').next())
+                .map(|s| s.chars().take(3).collect::<String>())
+                .unwrap_or_else(|| "---".to_string());
 
-            let blocking_key = format!("{}_{}", soundex_code, postal_code);
+            // Telefon letzte 4 Ziffern
+            let phone_digits = contact.phone
+                .as_deref()
+                .or(contact.mobile.as_deref())
+                .map(|p| p.chars().filter(|c| c.is_numeric()).collect::<String>())
+                .and_then(|d| {
+                    let len = d.len();
+                    if len >= 4 {
+                        Some(d[len-4..].to_string())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| "0000".to_string());
+
+            let blocking_key = format!("{}-{}-{}", soundex_code, email_user, phone_digits);
 
             buckets.entry(blocking_key)
                 .or_insert_with(Vec::new)
@@ -1274,8 +1290,9 @@ Basierend auf dem hochkarätigen Audit von ChatGPT und Gemini's Analyse wurden z
 - ~45 Sekunden für einen Scan
 
 **Lösung implementiert:**
-- SCHRITT A: Blocking mit HashMap (O(n))
-  - Bucket-Key: `soundex(lastName) + first3(postalCode)`
+- SCHRITT A: Blocking mit HashMap (O(n)) - **VARIANTE A**
+  - Bucket-Key: `soundex(lastName) + emailUser[:3] + phoneDigits[-4]`
+  - Beispiel: "Müller, max@test.de, 456789" → "M460-max-6789"
   - Nur Kontakte im gleichen Bucket vergleichen
 - SCHRITT B: Fuzzy-Match nur innerhalb Buckets (O(b²))
   - Statt 312 Mio. → nur ~5.000 Vergleiche
