@@ -34,78 +34,504 @@ Das Ziel ist ein schneller, moderner und benutzerfreundlicher client-seitiger Ko
 
 **Strategie:** Hybrid-Architektur mit Rust/WebAssembly für CPU-intensive Operationen
 
-**Phase 1: Grundlagen (Voraussetzungen)**
-1. **Virtual Scrolling** - Nur 20-30 sichtbare Zeilen rendern (JS)
-   - Intersection Observer API
-   - Smooth Scrolling trotz 25k+ Kontakte
-   - Geschätzte Implementierung: 2-3 Stunden
+**Branch:** `feature/wasm-performance` (erstellt am 2025-11-02)
 
-2. **IndexedDB Migration** - LocalStorage-Limit umgehen
-   - Migration von localStorage → IndexedDB
-   - Async Storage-API
-   - Keine 10 MB Grenze mehr
-   - Geschätzte Implementierung: 3-4 Stunden
+---
 
-3. **Web Worker Infrastruktur** - UI-Blocking vermeiden
-   - Schwere Operationen in Background-Thread
-   - Message-Passing-Interface
-   - Geschätzte Implementierung: 2 Stunden
+#### 🎯 Architektur-Entscheidungen (Basierend auf Gemini + Claude Analyse)
 
-**Phase 2: Rust/WASM Core-Module**
-4. **WASM Build-Pipeline** - Entwicklungsumgebung
-   - `wasm-pack` Setup
-   - Cargo.toml konfigurieren
-   - JS/WASM Bridge erstellen
-   - Bundle-Size-Optimierung
-   - Geschätzte Implementierung: 4-6 Stunden
+**Grundprinzip: "50ms-Regel"**
+> Operationen die >50ms dauern UND "denken" (rechnen) statt "malen" (DOM) → Rust/WASM
+> Operationen mit DOM-Interaktion → JavaScript
 
-5. **Duplikat-Detector (Rust)** - Kritischster Bottleneck
-   - Parallele Duplikat-Suche mit Rayon
-   - Levenshtein Distance
-   - Jaro-Winkler für Tippfehler
-   - Soundex/Metaphone für phonetische Ähnlichkeit
-   - **Performance:** 25k Kontakte in <1s (aktuell: ~45s in JS)
-   - Geschätzte Implementierung: 8-10 Stunden
+**Was kommt in Rust/WASM:**
+1. ✅ **Duplikat-Scanner** - O(n²) bei 25k = 312 Mio. Vergleiche → ~45s in JS, <1s in Rust
+2. ✅ **Fuzzy Search** - 25k × 22 Felder = 550k String-Vergleiche pro Tastendruck → ~800ms in JS, <10ms in Rust
+3. ✅ **VCF Parser** - Text-Parsing ist CPU-intensiv → ~2s in JS, ~180ms in Rust
+4. ✅ **Sortierung (Hybrid)** - Nur bei >5000 Kontakten (Bridge-Overhead vermeiden)
+5. ✅ **Verschlüsselung** - Sicherheit + Performance (später)
 
-6. **Fuzzy Search Engine (Rust)** - Inverted Index
-   - Tantivy Volltext-Suchindex
-   - Typo-Toleranz (~2 Buchstaben)
-   - Multi-Field Search (Name, E-Mail, Firma, Notizen)
-   - **Performance:** Suche in 25k in <10ms (aktuell: ~800ms in JS)
-   - Geschätzte Implementierung: 10-12 Stunden
+**Was bleibt in JavaScript:**
+1. ✅ **Virtual Scrolling** - DOM-Manipulation (Intersection Observer)
+2. ✅ **State Management** - Proxy-basiert, JS ist hier schneller
+3. ✅ **UI Rendering** - Alle DOM-Updates
+4. ✅ **Event Handling** - Tastatur, Maus, Touch
+5. ✅ **Sortierung bei <5000 Kontakten** - JS schneller wegen Bridge-Overhead
 
-7. **High-Performance Sorting (Rust)** - Radix Sort
-   - Radix Sort für große Datensätze
-   - Multi-Key Sorting
-   - **Performance:** 25k Kontakte in ~12ms (aktuell: ~150ms in JS)
-   - Geschätzte Implementierung: 4-5 Stunden
+---
 
-8. **VCF Parser (Rust)** - Schneller Import
-   - Paralleles Parsing großer VCF-Dateien
-   - Streaming-Parser für >10 MB Dateien
-   - **Performance:** 5000-Kontakt-VCF in ~180ms (aktuell: ~2s in JS)
-   - Geschätzte Implementierung: 6-8 Stunden
+#### 📁 Geplante Dateistruktur
 
-**Phase 3: Optimierungen**
-9. **Memory Pool** - Weniger Garbage Collection
-   - Objekt-Recycling für Kontakt-Rendering
-   - Weniger Memory-Churn
+```
+contacts/                          # Aktuelles Projekt
+├── index.html
+├── style.css
+├── main.js
+├── state.js
+├── ui.js
+├── events.js
+├── contacts.js
+├── vcf-handler.js                 # ⚠️ Wird zu vcf-handler-js.js (Fallback)
+├── utils.js
+├── storage.js
+├── ... (alle anderen JS-Dateien)
+│
+├── wasm/                          # ⭐ NEU: WASM-Module
+│   ├── Cargo.toml                 # Rust-Projekt-Konfiguration
+│   ├── src/
+│   │   ├── lib.rs                 # Entry Point für alle WASM-Module
+│   │   ├── duplicate/
+│   │   │   ├── mod.rs             # Public API
+│   │   │   ├── detector.rs        # Duplikat-Erkennung
+│   │   │   ├── similarity.rs      # Levenshtein, Jaro-Winkler
+│   │   │   └── phonetic.rs        # Soundex, Metaphone
+│   │   ├── search/
+│   │   │   ├── mod.rs             # Public API
+│   │   │   ├── fuzzy.rs           # Fuzzy-Matching-Algorithmen
+│   │   │   └── index.rs           # Inverted Index (Tantivy)
+│   │   ├── vcf/
+│   │   │   ├── mod.rs             # Public API
+│   │   │   ├── parser.rs          # VCF-Parser
+│   │   │   ├── exporter.rs        # VCF-Export
+│   │   │   └── stream.rs          # Streaming-Parser für >10MB
+│   │   ├── sort/
+│   │   │   ├── mod.rs             # Public API
+│   │   │   └── radix.rs           # Radix Sort
+│   │   └── crypto/                # Später: Verschlüsselung
+│   │       ├── mod.rs
+│   │       └── encrypt.rs         # AES-256, Argon2
+│   ├── pkg/                       # ⭐ Generiert von wasm-pack
+│   │   ├── contacts_wasm_bg.wasm  # Kompiliertes WASM
+│   │   ├── contacts_wasm.js       # JS-Bindings
+│   │   └── contacts_wasm.d.ts     # TypeScript-Definitionen
+│   └── tests/                     # Rust Unit-Tests
+│       ├── duplicate_test.rs
+│       ├── search_test.rs
+│       └── vcf_test.rs
+│
+├── wasm-bridge.js                 # ⭐ NEU: JS ↔ WASM Kommunikation
+├── wasm-worker.js                 # ⭐ NEU: Web Worker für WASM
+└── virtual-scroller.js            # ⭐ NEU: Virtual Scrolling (JS)
+```
 
-10. **Lazy Loading** - On-Demand Daten laden
-    - Social-Media-Badges on demand
-    - Avatar-Bilder lazy loaden
+---
 
-**Geschätzter Gesamtaufwand:** ~50-60 Stunden (1-2 Wochen Vollzeit)
+#### 🔄 Phase 1: JavaScript Foundation (Tag 1-2)
 
-**Technologie-Stack:**
-- **Rust:** `wasm-bindgen`, `serde`, `rayon`, `tantivy`, `strsim`
-- **Build:** `wasm-pack`, `cargo`
-- **JS Integration:** Web Workers, SharedArrayBuffer (optional)
+**Status:** 🔴 Nicht begonnen
 
-**Bundle-Size-Impact:**
-- WASM Runtime: ~100 KB (gzipped)
-- Core Module: ~200-300 KB (gzipped)
-- Gesamt: +400 KB (akzeptabel für die Performance-Gewinne)
+**Ziel:** UI bleibt responsive bei 25k+ Kontakten (ohne WASM)
+
+##### 1.1 Virtual Scrolling (Priorität: HOCH)
+**Datei:** `virtual-scroller.js` (NEU)
+
+**Aufwand:** 2-3 Stunden
+
+**Implementierung:**
+```javascript
+// virtual-scroller.js
+export class VirtualScroller {
+    constructor(container, itemHeight, renderItem) {
+        this.container = container;
+        this.itemHeight = itemHeight;
+        this.renderItem = renderItem;
+        this.visibleItems = 30; // Nur 30 Zeilen rendern
+        this.items = [];
+        this.scrollTop = 0;
+
+        this.setupIntersectionObserver();
+    }
+
+    setupIntersectionObserver() {
+        // Intersection Observer für smooth scrolling
+        this.observer = new IntersectionObserver(
+            (entries) => this.handleIntersection(entries),
+            { root: this.container, threshold: 0.1 }
+        );
+    }
+
+    setItems(items) {
+        this.items = items;
+        this.render();
+    }
+
+    render() {
+        const startIndex = Math.floor(this.scrollTop / this.itemHeight);
+        const endIndex = Math.min(
+            startIndex + this.visibleItems,
+            this.items.length
+        );
+
+        // Nur sichtbare Items rendern
+        const fragment = document.createDocumentFragment();
+        for (let i = startIndex; i < endIndex; i++) {
+            const itemEl = this.renderItem(this.items[i], i);
+            fragment.appendChild(itemEl);
+        }
+
+        this.container.innerHTML = '';
+        this.container.appendChild(fragment);
+    }
+}
+```
+
+**Integration in ui.js:**
+```javascript
+// ui.js - renderContactList() anpassen
+import { VirtualScroller } from './virtual-scroller.js';
+
+let virtualScroller = null;
+
+function renderContactList() {
+    const contacts = getVisualOrder();
+
+    // Virtual Scrolling nur bei >500 Kontakten aktivieren
+    if (contacts.length > 500) {
+        if (!virtualScroller) {
+            virtualScroller = new VirtualScroller(
+                dom.contactList,
+                50, // itemHeight in px
+                (contact) => renderContact(contact) // Bestehende Funktion nutzen
+            );
+        }
+        virtualScroller.setItems(contacts);
+    } else {
+        // Bestehende Logik für <500 Kontakte
+        renderContactListClassic(contacts);
+    }
+}
+```
+
+**Testing:**
+- [ ] Test mit 100 Kontakten (klassisches Rendering)
+- [ ] Test mit 1.000 Kontakten (Virtual Scrolling)
+- [ ] Test mit 10.000 Kontakten (Virtual Scrolling)
+- [ ] Smooth Scrolling funktioniert
+- [ ] Keyboard-Navigation (Pfeil-Tasten) funktioniert mit Virtual Scrolling
+
+---
+
+##### 1.2 Web Worker Infrastructure (Priorität: MITTEL)
+**Datei:** `wasm-worker.js` (NEU)
+
+**Aufwand:** 2 Stunden
+
+**Implementierung:**
+```javascript
+// wasm-worker.js
+// Wird später für WASM-Operationen genutzt, jetzt Setup
+
+self.onmessage = async (e) => {
+    const { type, id, payload } = e.data;
+
+    try {
+        let result;
+
+        switch(type) {
+            case 'INIT_WASM':
+                // Später: WASM initialisieren
+                result = { ready: true };
+                break;
+
+            case 'FIND_DUPLICATES':
+                // Später: WASM-Duplikat-Scanner
+                result = await findDuplicatesPlaceholder(payload.contacts);
+                break;
+
+            case 'FUZZY_SEARCH':
+                // Später: WASM-Fuzzy-Search
+                result = await fuzzySearchPlaceholder(payload.query, payload.contacts);
+                break;
+
+            case 'PARSE_VCF':
+                // Später: WASM-VCF-Parser
+                result = await parseVcfPlaceholder(payload.vcfText);
+                break;
+        }
+
+        self.postMessage({ type: 'SUCCESS', id, result });
+    } catch (error) {
+        self.postMessage({ type: 'ERROR', id, error: error.message });
+    }
+};
+
+// Placeholder-Funktionen (werden später durch WASM ersetzt)
+async function findDuplicatesPlaceholder(contacts) {
+    return { duplicates: [], message: 'WASM not loaded yet' };
+}
+
+async function fuzzySearchPlaceholder(query, contacts) {
+    return { results: [], message: 'WASM not loaded yet' };
+}
+
+async function parseVcfPlaceholder(vcfText) {
+    return { contacts: [], message: 'WASM not loaded yet' };
+}
+```
+
+**Bridge-Datei:** `wasm-bridge.js` (NEU)
+```javascript
+// wasm-bridge.js
+// High-level API für WASM-Operationen (läuft in Main-Thread)
+
+class WasmBridge {
+    constructor() {
+        this.worker = new Worker('./wasm-worker.js');
+        this.pendingRequests = new Map();
+        this.nextId = 0;
+        this.wasmReady = false;
+
+        this.worker.onmessage = (e) => this.handleResponse(e.data);
+    }
+
+    async init() {
+        const result = await this.sendRequest('INIT_WASM', {});
+        this.wasmReady = result.ready;
+        return this.wasmReady;
+    }
+
+    async findDuplicates(contacts, threshold = 0.85) {
+        // Threshold-basiert: Nur bei vielen Kontakten WASM nutzen
+        if (contacts.length < 1000) {
+            // Fallback zu JS-Implementierung (schneller wegen Bridge-Overhead)
+            return this.findDuplicatesJS(contacts, threshold);
+        }
+
+        const result = await this.sendRequest('FIND_DUPLICATES', {
+            contacts,
+            threshold
+        });
+        return result.duplicates;
+    }
+
+    async fuzzySearch(query, contacts) {
+        // Threshold-basiert
+        if (contacts.length < 5000) {
+            return this.fuzzySearchJS(query, contacts);
+        }
+
+        const result = await this.sendRequest('FUZZY_SEARCH', {
+            query,
+            contacts
+        });
+        return result.results;
+    }
+
+    async parseVcf(vcfText) {
+        // VCF-Parsing immer in WASM (auch bei kleinen Dateien)
+        const result = await this.sendRequest('PARSE_VCF', { vcfText });
+        return result.contacts;
+    }
+
+    // Helper: Promise-basierte Request-Handling
+    sendRequest(type, payload) {
+        return new Promise((resolve, reject) => {
+            const id = this.nextId++;
+            this.pendingRequests.set(id, { resolve, reject });
+            this.worker.postMessage({ type, id, payload });
+        });
+    }
+
+    handleResponse(data) {
+        const { type, id, result, error } = data;
+        const request = this.pendingRequests.get(id);
+
+        if (!request) return;
+
+        this.pendingRequests.delete(id);
+
+        if (type === 'SUCCESS') {
+            request.resolve(result);
+        } else {
+            request.reject(new Error(error));
+        }
+    }
+
+    // JS-Fallback-Implementierungen (für kleine Datensätze)
+    findDuplicatesJS(contacts, threshold) {
+        // Nutze bestehende JS-Implementierung aus utils.js
+        // ... (später implementieren)
+        return [];
+    }
+
+    fuzzySearchJS(query, contacts) {
+        // Nutze bestehende JS-Suche
+        // ... (später implementieren)
+        return [];
+    }
+}
+
+// Singleton-Instanz
+export const wasm = new WasmBridge();
+```
+
+**Testing:**
+- [ ] Worker wird korrekt erstellt
+- [ ] Message-Passing funktioniert
+- [ ] Fehlerbehandlung funktioniert
+- [ ] Promise-basierte API funktioniert
+
+---
+
+##### 1.3 LocalStorage bleibt (KEINE IndexedDB Migration)
+**Entscheidung:** Gemini hat recht - bei schnellem WASM ist localStorage ausreichend
+
+**Begründung:**
+- localStorage-Limit: ~5-10 MB
+- 25.000 Kontakte mit allen Feldern: ~8 MB als JSON
+- **Mit WASM-Kompression:** Kann <3 MB werden
+- Einfacher als IndexedDB (keine Async-Migration nötig)
+- Falls Limit erreicht: Warnung + Export-Empfehlung
+
+**Monitoring hinzufügen:**
+```javascript
+// storage.js - erweitern
+export function checkStorageUsage() {
+    const used = new Blob([localStorage.getItem('contacts') || '']).size;
+    const limit = 5 * 1024 * 1024; // 5 MB (konservativ)
+    const percentage = (used / limit) * 100;
+
+    if (percentage > 80) {
+        console.warn(`LocalStorage: ${percentage.toFixed(1)}% voll (${used} Bytes)`);
+        // Optional: User-Warning in UI anzeigen
+    }
+
+    return { used, limit, percentage };
+}
+```
+
+---
+
+#### 🦀 Phase 2: Rust/WASM Setup (Tag 3-4)
+
+**Status:** 🔴 Nicht begonnen
+
+##### 2.1 WASM Build-Pipeline (Priorität: HOCH)
+**Aufwand:** 4-6 Stunden
+
+**Schritte:**
+
+**1. Rust & wasm-pack installieren**
+```bash
+# Rust installieren (falls nicht vorhanden)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# wasm-pack installieren
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+# Target hinzufügen
+rustup target add wasm32-unknown-unknown
+```
+
+**2. Cargo-Projekt erstellen**
+```bash
+cd contacts/
+mkdir wasm
+cd wasm
+cargo init --lib
+```
+
+**3. Cargo.toml konfigurieren**
+```toml
+[package]
+name = "contacts-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]  # Wichtig für WASM!
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6"
+
+# Für Duplikat-Scanner
+rayon = "1.8"  # Parallele Verarbeitung
+strsim = "0.11"  # Levenshtein, Jaro-Winkler
+
+# Für Fuzzy Search (später)
+# tantivy = "0.21"
+
+# Für VCF-Parser (später)
+# nom = "7.1"
+
+# Für Crypto (später)
+# aes-gcm = "0.10"
+# argon2 = "0.5"
+
+[profile.release]
+opt-level = "z"  # Optimierung für Größe
+lto = true       # Link-Time-Optimization
+codegen-units = 1
+```
+
+**4. Hello World WASM-Modul**
+```rust
+// wasm/src/lib.rs
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+pub fn greet(name: &str) -> String {
+    format!("Hello from Rust, {}!", name)
+}
+
+#[wasm_bindgen]
+pub fn init() {
+    // Setup (falls nötig)
+    console_log("WASM module initialized!");
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
+
+fn console_log(s: &str) {
+    log(s);
+}
+```
+
+**5. Kompilieren**
+```bash
+cd wasm
+wasm-pack build --target web --out-dir pkg
+```
+
+**6. In HTML einbinden**
+```html
+<!-- index.html -->
+<script type="module">
+    import init, { greet, init as initWasm } from './wasm/pkg/contacts_wasm.js';
+
+    async function run() {
+        await init();  // WASM laden
+        initWasm();    // WASM initialisieren
+        console.log(greet('World'));  // "Hello from Rust, World!"
+    }
+
+    run();
+</script>
+```
+
+**Testing:**
+- [ ] Rust & wasm-pack installiert
+- [ ] Cargo-Projekt kompiliert
+- [ ] WASM lädt im Browser
+- [ ] `greet()` funktioniert
+- [ ] Keine Console-Errors
+- [ ] Bundle-Size akzeptabel (<500 KB)
+
+---
+
+##### 2.2 Duplikat-Detector (Rust) (Priorität: SEHR HOCH)
+**Datei:** `wasm/src/duplicate/`
+
+**Aufwand:** 8-10 Stunden
+
+**Implementierung:** (siehe nächster Abschnitt für Details)
 
 ---
 
