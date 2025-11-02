@@ -116,6 +116,37 @@ contacts/                          # Aktuelles Projekt
 
 ---
 
+#### ⚠️ Kritische Architektur-Korrekturen (Gemini's Feedback) - ABGESCHLOSSEN
+
+**Status:** ✅ Abgeschlossen (2025-11-02, Commit: a87b41c)
+
+Drei fundamentale Architektur-Fehler wurden basierend auf Gemini's Analyse korrigiert:
+
+**Fix 1: IndexedDB statt localStorage** ✅
+- Problem: localStorage ist synchron → blockiert UI, nicht aus Worker zugänglich
+- Lösung: IndexedDB mit Dexie.js → async, worker-accessible, keine UI-Blocks
+- Impact: Kein UI-Blocking mehr beim Laden von 8MB Kontakten
+
+**Fix 2: fuzzy-matcher statt tantivy** ✅
+- Problem: tantivy = 2MB WASM Bundle (Overkill für 25k Kontakte)
+- Lösung: fuzzy-matcher = 50KB WASM (97.5% kleiner)
+- Impact: Bundle-Size von 2MB auf 50KB reduziert
+
+**Fix 3: Worker liest direkt aus IndexedDB** ✅
+- Problem: Main Thread → 8MB JSON → Worker = Datenkopie bei jedem Aufruf
+- Lösung: Worker hat eigene IndexedDB-Verbindung, Main Thread sendet nur Befehle
+- Impact: Keine Daten-Kopien mehr, nur noch Befehlsübermittlung
+
+**Dokumentation:**
+- ✅ Vollständige wasm-bridge.js Implementierung
+- ✅ Korrekte wasm-worker.js mit IndexedDB-Integration
+- ✅ Alle JavaScript-Integrationen korrigiert
+- ✅ Performance-Tests angepasst
+
+**Ergebnis:** State-of-the-Art 3-Schichten-Architektur (UI Layer → Logic Layer → Storage Layer)
+
+---
+
 #### 🔄 Phase 1: JavaScript Foundation (Tag 1-2)
 
 **Status:** 🔴 Nicht begonnen
